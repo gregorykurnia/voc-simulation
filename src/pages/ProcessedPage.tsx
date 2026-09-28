@@ -131,7 +131,7 @@ function ProcessedRow({ review, catalogs, clusters, onOpen, onSelectCluster }: {
   const store = catalogs.stores?.find((item) => item.id === annotation.store_id)
   return <tr className="review-row processed-row" tabIndex={0} onClick={onOpen} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }} aria-label={`Open processed review ${review.id}`}>
     <td className="processed-review-cell"><p>{review.raw_text}</p><span>{review.id} · {formatDate(review.feedback_at)}</span></td>
-    <td><span className="source-label"><SourceGlyph source={review.voice_source} />{compactSource(review.voice_source)}</span></td>
+    <td><span className="source-label"><SourceGlyph source={review.voice_source} /><span className="processed-source-name" title={review.voice_source}>{compactSource(review.voice_source)}</span></span></td>
     <td><div className="brand-product"><span>{annotation.brand ?? <span className="unassigned">Unknown brand</span>}</span><span className="tag-neutral">{annotation.product_category ?? 'Product unclear'}</span></div></td>
     <td><span className="tag-neutral issue-tag">{annotation.issue_type}</span></td>
     <td className="store-cell">{store?.label.split(' — ')[0] ?? '—'}</td>
