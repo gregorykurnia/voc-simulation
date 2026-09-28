@@ -267,6 +267,11 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .processed-table th:nth-child(8) { width: 6%; }
 .processed-table th:nth-child(9) { width: 10%; }
 .processed-table thead th { padding: 0 9px; }
+.processed-table thead th { position: relative; }
+.processed-table thead .sort-header { width: 100%; justify-content: flex-start; text-align: left; white-space: nowrap; }
+.cluster-resize-handle { position: absolute; top: 0; right: -1px; z-index: 1; width: 10px; height: 100%; cursor: col-resize; touch-action: none; }
+.cluster-resize-handle::after { content: ""; position: absolute; top: 10px; bottom: 10px; left: 4px; border-left: 1px solid #c5ceda; }
+.cluster-resize-handle:hover::after, .cluster-resize-handle:focus-visible::after { border-left: 2px solid var(--blue); }
 .processed-table tbody td { padding: 10px 9px; }
 .processed-table .source-label { max-width: 100%; }
 .processed-source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

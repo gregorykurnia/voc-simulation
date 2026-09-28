@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
-import { AlertCircle, ArrowRight, ChevronRight, FilterX, Layers3, Search, Sparkles } from 'lucide-react'
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, ChevronRight, FilterX, Layers3, Search, Sparkles } from 'lucide-react'
 import { useWorkspace } from '../context'
 import { Pagination, SourceGlyph } from './ReviewsPage'
 import { ReviewState } from '../components/StatusPill'
 import { SentimentTag } from '../components/SentimentTag'
 import { compactSource, formatDate } from '../utils'
 import type { ReviewRecord, Sentiment, TopicClusterSummary } from '../types'
+
+type ProcessedSortKey = 'statement' | 'source' | 'brand' | 'issue' | 'store' | 'sentiment' | 'cluster' | 'confidence' | 'reviewState'
 
 export function ProcessedPage() {
   const { reviews, catalogs, clusters, lastRun, processAll, openReview, processProgress } = useWorkspace()
@@ -14,6 +16,12 @@ export function ProcessedPage() {
   const [selectedCluster, setSelectedCluster] = useState('')
   const [allClusters, setAllClusters] = useState(false)
   const [page, setPage] = useState(1)
+  const [sortKey, setSortKey] = useState<ProcessedSortKey | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [clusterColumnWidth, setClusterColumnWidth] = useState<number | null>(null)
+  const [processedTableWidth, setProcessedTableWidth] = useState<number | null>(null)
+  const processedTableRef = useRef<HTMLTableElement>(null)
+  const clusterResizeStart = useRef<{ x: number; columnWidth: number; tableWidth: number } | null>(null)
   const pageSize = 15
   const processed = reviews.filter((review) => Boolean(review.annotation))
   const pending = reviews.filter((review) => ['Unprocessed', 'Failed'].includes(review.processing_status)).length
@@ -36,13 +44,64 @@ export function ProcessedPage() {
     if (filters.workflow && annotation.workflow_status !== filters.workflow) return false
     if (selectedCluster && annotation.cluster_id !== selectedCluster) return false
     return true
-  }).sort((a, b) => b.feedback_at.localeCompare(a.feedback_at)), [processed, search, filters, selectedCluster])
+  }).sort((a, b) => {
+    if (!sortKey) return b.feedback_at.localeCompare(a.feedback_at)
+    const aAnnotation = a.annotation!
+    const bAnnotation = b.annotation!
+    if (sortKey === 'confidence') return (aAnnotation.confidence - bAnnotation.confidence) * (sortDirection === 'asc' ? 1 : -1)
+    const valueFor = (review: ReviewRecord) => {
+      const annotation = review.annotation!
+      switch (sortKey) {
+        case 'statement': return review.raw_text
+        case 'source': return review.voice_source
+        case 'brand': return `${annotation.brand ?? ''} ${annotation.product_category ?? ''}`
+        case 'issue': return annotation.issue_type
+        case 'store': return catalogs.stores?.find((item) => item.id === annotation.store_id)?.label.split(' — ')[0] ?? ''
+        case 'sentiment': return annotation.sentiment
+        case 'cluster': return clusters.find((item) => item.id === annotation.cluster_id)?.title ?? 'Needs review'
+        case 'reviewState': return annotation.review_state
+      }
+    }
+    const comparison = (valueFor(a) ?? '').localeCompare(valueFor(b) ?? '', 'id-ID', { sensitivity: 'base', numeric: true })
+    return comparison * (sortDirection === 'asc' ? 1 : -1)
+  }), [processed, search, filters, selectedCluster, sortKey, sortDirection, catalogs.stores, clusters])
 
   const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize))
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize)
   const activeCluster = clusters.find((cluster) => cluster.id === selectedCluster)
   const resetFilters = () => { setSearch(''); setFilters({ source: '', brand: '', product: '', issue: '', store: '', sentiment: '', cluster: '', status: '', workflow: '' }); setSelectedCluster(''); setPage(1) }
   const setFilter = (key: keyof typeof filters, value: string) => { setFilters((previous) => ({ ...previous, [key]: value })); setPage(1) }
+  const updateSort = (key: ProcessedSortKey) => {
+    if (sortKey === key) setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDirection('asc') }
+    setPage(1)
+  }
+  const beginClusterResize = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const header = event.currentTarget.closest('th')
+    const table = processedTableRef.current
+    if (!header || !table) return
+    clusterResizeStart.current = { x: event.clientX, columnWidth: header.getBoundingClientRect().width, tableWidth: table.getBoundingClientRect().width }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveClusterResize = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const start = clusterResizeStart.current
+    if (!start) return
+    const nextWidth = Math.max(120, start.columnWidth + event.clientX - start.x)
+    setClusterColumnWidth(nextWidth)
+    setProcessedTableWidth(start.tableWidth + nextWidth - start.columnWidth)
+  }
+  const endClusterResize = () => { clusterResizeStart.current = null }
+  const adjustClusterWidth = (delta: number) => {
+    const header = processedTableRef.current?.querySelector('th:nth-child(7)')
+    const table = processedTableRef.current
+    if (!header || !table) return
+    const oldWidth = header.getBoundingClientRect().width
+    const nextWidth = Math.max(120, oldWidth + delta)
+    setClusterColumnWidth(nextWidth)
+    setProcessedTableWidth(table.getBoundingClientRect().width + nextWidth - oldWidth)
+  }
 
   return <section className="page-content processed-page">
     <div className="page-heading-row processed-heading">
@@ -91,8 +150,23 @@ export function ProcessedPage() {
 
       <div className="table-frame processed-table-frame">
         {selectedCluster && <div className="selection-bar"><Layers3 size={15} /><span>Showing <strong>{filtered.length} reviews</strong> in “{activeCluster?.title}”</span><button onClick={() => { setSelectedCluster(''); setFilter('cluster', '') }}>Clear selection <span>×</span></button></div>}
-        <div className="table-scroll"><table className="data-table processed-table">
-          <thead><tr><th className="processed-review-column">Customer statement</th><th>Source</th><th>Brand / product</th><th>Issue</th><th>Store</th><th>Sentiment</th><th>Cluster</th><th>Confidence</th><th>Review state</th></tr></thead>
+        <div className="table-scroll"><table ref={processedTableRef} className="data-table processed-table" style={processedTableWidth ? { width: `${processedTableWidth}px` } : undefined}>
+          <thead><tr>
+            <ProcessedSortHeader label="Customer statement" field="statement" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Source" field="source" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Brand / product" field="brand" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Issue" field="issue" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Store" field="store" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Sentiment" field="sentiment" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Cluster" field="cluster" selected={sortKey} direction={sortDirection} onSort={updateSort} width={clusterColumnWidth}>
+              <span className="cluster-resize-handle" role="separator" aria-label="Resize Cluster column" aria-orientation="vertical" tabIndex={0}
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={beginClusterResize} onPointerMove={moveClusterResize} onPointerUp={endClusterResize} onPointerCancel={endClusterResize} onLostPointerCapture={endClusterResize}
+                onKeyDown={(event: ReactKeyboardEvent<HTMLSpanElement>) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); adjustClusterWidth(event.key === 'ArrowRight' ? 16 : -16) } }} />
+            </ProcessedSortHeader>
+            <ProcessedSortHeader label="Confidence" field="confidence" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+            <ProcessedSortHeader label="Review state" field="reviewState" selected={sortKey} direction={sortDirection} onSort={updateSort} />
+          </tr></thead>
           <tbody>{visible.map((review) => <ProcessedRow key={review.id} review={review} catalogs={catalogs} clusters={clusters} onOpen={() => openReview(review)} onSelectCluster={(clusterId) => { setSelectedCluster(clusterId); setFilter('cluster', clusterId) }} />)}</tbody>
         </table></div>
         {!visible.length && <div className="empty-table"><div className="empty-icon"><Search size={19} /></div><h3>No tagged reviews match</h3><p>Adjust the selected filters to see more review evidence.</p><button className="button-secondary" onClick={resetFilters}>Clear filters</button></div>}
@@ -123,6 +197,22 @@ function ClusterCard({ cluster, selected, reviews, onSelect, onReview }: { clust
     </button>
     {evidence.length > 0 && <div className="cluster-mini-evidence"><span className="mini-evidence-label">EVIDENCE</span>{evidence.map((review) => <button key={review.id} onClick={() => onReview(review)} title={review.raw_text}><span>“{review.raw_text}”</span><i>{review.id}</i></button>)}</div>}
   </article>
+}
+
+function ProcessedSortHeader({ label, field, selected, direction, onSort, width, children }: {
+  label: string
+  field: ProcessedSortKey
+  selected: ProcessedSortKey | null
+  direction: 'asc' | 'desc'
+  onSort: (field: ProcessedSortKey) => void
+  width?: number | null
+  children?: ReactNode
+}) {
+  const active = selected === field
+  const icon = !active ? <ArrowUpDown size={12} /> : direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  return <th aria-sort={active ? direction === 'asc' ? 'ascending' : 'descending' : 'none'} style={width ? { width: `${width}px` } : undefined}>
+    <button className={`sort-header ${active ? 'sort-active' : ''}`} onClick={() => onSort(field)}>{label}{icon}</button>{children}
+  </th>
 }
 
 function ProcessedRow({ review, catalogs, clusters, onOpen, onSelectCluster }: { review: ReviewRecord; catalogs: Record<string, { id: string; label: string }[]>; clusters: TopicClusterSummary[]; onOpen: () => void; onSelectCluster: (clusterId: string) => void }) {
