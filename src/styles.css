@@ -405,19 +405,6 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .history-pending .history-status { color: #9aa5b2; }
 .drawer-process-button { width: 100%; margin-top: 16px; }
 
-.auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--canvas); }
-.auth-card { width: min(100%, 405px); padding: 33px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 6px 25px rgba(32,50,78,.045); }
-.auth-mark { width: 35px; height: 35px; display: grid; place-items: center; margin-bottom: 22px; border-radius: 7px; background: var(--blue); color: white; font-size: 17px; font-weight: 800; }
-.auth-card .eyebrow { margin-bottom: 7px; }
-.auth-card h1 { margin: 0 0 9px; color: #20324c; font-size: 22px; font-weight: 730; letter-spacing: -.035em; }
-.auth-copy { margin: 0 0 23px; color: #758299; font-size: 13px; line-height: 1.55; }
-.google-button { width: 100%; min-height: 43px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #d7dee8; border-radius: 5px; background: white; color: #35455e; font-size: 12px; font-weight: 650; cursor: pointer; }
-.google-button:hover { background: #f9fafc; }
-.google-button > svg:last-child { margin-left: auto; color: #8290a4; }
-.google-glyph { width: 17px; height: 17px; }
-.auth-footnote { display: flex; align-items: center; gap: 7px; margin-top: 19px; color: #8b97a7; font-size: 10px; }
-.auth-footnote .tiny-dot { width: 6px; height: 6px; background: #4b9d72; }
-.auth-error { margin: 13px 0 0; color: #a3383a; font-size: 11px; line-height: 1.5; }
 .setup-card { width: min(100%, 465px); }
 .setup-card code { padding: 2px 4px; border-radius: 3px; background: #f0f3f7; color: #455671; font-size: 11px; }
 .setup-list { display: grid; gap: 10px; padding-top: 15px; border-top: 1px solid var(--line-soft); }

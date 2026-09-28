@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
-import { AlertCircle, ArrowRight, CircleHelp, Database, FileText, Inbox, LoaderCircle, LogOut, RefreshCw, Tags } from 'lucide-react'
-import { auth, firebaseConfigured, googleProvider } from './firebase'
+import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
+import { AlertCircle, CircleHelp, Database, FileText, Inbox, LoaderCircle, RefreshCw, Tags } from 'lucide-react'
+import { auth, disableFirestoreData } from './firebase'
 import { ensureSeedData, listenCatalogs, listenClusters, listenLastRun, listenReviews, processReviews, type ProcessProgress } from './data/firestore'
 import { ProcessedPage } from './pages/ProcessedPage'
 import { ReviewsPage } from './pages/ReviewsPage'
@@ -18,36 +18,47 @@ export function App() {
 function AppGate() {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [authError, setAuthError] = useState('')
+  const [demoMode, setDemoMode] = useState(!auth)
   const demoUser: WorkspaceUser = { uid: 'browser-demo', displayName: 'Demo' }
 
   useEffect(() => {
-    if (!auth) {
+    const firebaseAuth = auth
+    if (!firebaseAuth) {
       setAuthReady(true)
       return
     }
-    return onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser)
+    let cancelled = false
+    let anonymousSignInStarted = false
+    const useDemoMode = () => {
+      disableFirestoreData()
+      setUser(null)
+      setDemoMode(true)
       setAuthReady(true)
-    }, (error) => {
-      setAuthError(error.message)
-      setAuthReady(true)
+    }
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (nextUser) => {
+      if (cancelled) return
+      if (nextUser) {
+        setUser(nextUser)
+        setDemoMode(false)
+        setAuthReady(true)
+        return
+      }
+      if (anonymousSignInStarted) return
+      anonymousSignInStarted = true
+      void signInAnonymously(firebaseAuth).catch(() => {
+        if (!cancelled) useDemoMode()
+      })
+    }, () => {
+      if (!cancelled) useDemoMode()
     })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
-  const signIn = async () => {
-    if (!auth) return
-    setAuthError('')
-    try {
-      await signInWithPopup(auth, googleProvider)
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Google sign-in could not be completed.')
-    }
-  }
-
-  if (!firebaseConfigured) return <Workspace user={demoUser} demoMode />
-  if (!authReady) return <CenteredState icon={<LoaderCircle className="spin" />} title="Connecting to Firebase" note="Checking your sign-in session." />
-  if (!user) return <SignInCard onSignIn={signIn} error={authError} />
+  if (!authReady) return <CenteredState icon={<LoaderCircle className="spin" />} title="Preparing the review workbench" note="Loading the synthetic proxy dataset." />
+  if (demoMode || !user) return <Workspace user={demoUser} demoMode />
   return <Workspace user={user} />
 }
 
@@ -150,8 +161,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
           <div className="topbar-actions">
             <div className="data-badge"><span className="tiny-dot" /> Dataset: Synthetic proxy</div>
             <div className="topbar-divider" />
-            <span className="topbar-user" title={user.email ?? undefined}>{demoMode ? 'Demo' : user.displayName?.split(' ')[0] ?? 'Account'}</span>
-            {!demoMode && <button className="icon-button" type="button" title="Sign out" aria-label="Sign out" onClick={() => auth && void signOut(auth)}><LogOut size={16} /></button>}
+            <span className="topbar-user" title={user.email ?? undefined}>{demoMode ? 'Demo' : user.displayName?.split(' ')[0] ?? 'Guest'}</span>
           </div>
         </header>
         {processProgress && <div className="global-progress" role="status">
@@ -172,28 +182,12 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
   </WorkspaceContext.Provider>
 }
 
-function SignInCard({ onSignIn, error }: { onSignIn: () => void; error: string }) {
-  return <div className="auth-screen"><div className="auth-card">
-    <div className="auth-mark">D</div>
-    <p className="eyebrow">DELAMI / SIGNALS</p>
-    <h1>Sign in to your workbench</h1>
-    <p className="auth-copy">Review customer feedback, inspect evidence, and validate annotations.</p>
-    <button className="google-button" onClick={onSignIn}><GoogleGlyph /> Continue with Google <ArrowRight size={16} /></button>
-    {error && <p className="auth-error" role="alert">{friendlyError(error)}</p>}
-    <div className="auth-footnote"><span className="tiny-dot" /> Firebase sign-in protects the review workspace.</div>
-  </div></div>
-}
-
 function CenteredState({ icon, title, note }: { icon: ReactNode; title: string; note: string }) {
   return <div className="centered-state"><div className="state-icon">{icon}</div><h2>{title}</h2><p>{note}</p></div>
 }
 
-function GoogleGlyph() {
-  return <svg aria-hidden="true" className="google-glyph" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.74 7.18l7.64 5.93c4.46-4.13 7.14-10.2 7.14-17.58Z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.96 23.96 0 0 0 0 24c0 3.88.93 7.55 2.56 10.78l7.97-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.87l-7.64-5.93c-2.13 1.45-4.85 2.3-8.26 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>
-}
-
 function friendlyError(message: string) {
-  if (/permission|insufficient/i.test(message)) return 'Firestore denied access. Enable Google sign-in and apply the authenticated rules in firestore.rules.'
-  if (/auth/i.test(message) && /unauthorized-domain/i.test(message)) return 'Add this local address to Firebase Authentication’s authorized domains, then try again.'
+  if (/permission|insufficient/i.test(message)) return 'Firestore denied access. Check the Firebase Authentication and Firestore rules settings.'
+  if (/auth/i.test(message) && /unauthorized-domain/i.test(message)) return 'Add this site to Firebase Authentication’s authorized domains, then try again.'
   return message
 }
