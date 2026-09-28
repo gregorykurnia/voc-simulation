@@ -1,14 +1,19 @@
 import { createContext, useContext } from 'react'
-import type { User } from 'firebase/auth'
 import type { ProcessProgress } from './data/firestore'
 import type { CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
+
+export interface WorkspaceUser {
+  uid: string
+  email?: string | null
+  displayName?: string | null
+}
 
 export interface WorkspaceContextValue {
   reviews: ReviewRecord[]
   catalogs: Record<string, CatalogValue[]>
   clusters: TopicClusterSummary[]
   lastRun: ProcessingRun | null
-  user: User
+  user: WorkspaceUser
   loading: boolean
   error: string
   processProgress: ProcessProgress | null

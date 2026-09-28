@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
-import { AlertCircle, ArrowRight, Check, CircleHelp, Database, FileText, Inbox, LoaderCircle, LogOut, RefreshCw, Tags } from 'lucide-react'
+import { AlertCircle, ArrowRight, CircleHelp, Database, FileText, Inbox, LoaderCircle, LogOut, RefreshCw, Tags } from 'lucide-react'
 import { auth, firebaseConfigured, googleProvider } from './firebase'
 import { ensureSeedData, listenCatalogs, listenClusters, listenLastRun, listenReviews, processReviews, type ProcessProgress } from './data/firestore'
 import { ProcessedPage } from './pages/ProcessedPage'
@@ -9,7 +9,7 @@ import { ReviewsPage } from './pages/ReviewsPage'
 import type { AuditEntry, CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
 import { listenReviewAudit } from './data/firestore'
 import { ReviewDrawer } from './components/ReviewDrawer'
-import { WorkspaceContext } from './context'
+import { WorkspaceContext, type WorkspaceUser } from './context'
 
 export function App() {
   return <BrowserRouter><AppGate /></BrowserRouter>
@@ -19,6 +19,7 @@ function AppGate() {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [authError, setAuthError] = useState('')
+  const demoUser: WorkspaceUser = { uid: 'browser-demo', displayName: 'Demo' }
 
   useEffect(() => {
     if (!auth) {
@@ -44,13 +45,13 @@ function AppGate() {
     }
   }
 
-  if (!firebaseConfigured) return <SetupNotice />
+  if (!firebaseConfigured) return <Workspace user={demoUser} demoMode />
   if (!authReady) return <CenteredState icon={<LoaderCircle className="spin" />} title="Connecting to Firebase" note="Checking your sign-in session." />
   if (!user) return <SignInCard onSignIn={signIn} error={authError} />
   return <Workspace user={user} />
 }
 
-function Workspace({ user }: { user: User }) {
+function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?: boolean }) {
   const [reviews, setReviews] = useState<ReviewRecord[]>([])
   const [catalogs, setCatalogs] = useState<Record<string, CatalogValue[]>>({})
   const [clusters, setClusters] = useState<TopicClusterSummary[]>([])
@@ -149,8 +150,8 @@ function Workspace({ user }: { user: User }) {
           <div className="topbar-actions">
             <div className="data-badge"><span className="tiny-dot" /> Dataset: Synthetic proxy</div>
             <div className="topbar-divider" />
-            <span className="topbar-user" title={user.email ?? undefined}>{user.displayName?.split(' ')[0] ?? 'Account'}</span>
-            <button className="icon-button" type="button" title="Sign out" aria-label="Sign out" onClick={() => auth && void signOut(auth)}><LogOut size={16} /></button>
+            <span className="topbar-user" title={user.email ?? undefined}>{demoMode ? 'Demo' : user.displayName?.split(' ')[0] ?? 'Account'}</span>
+            {!demoMode && <button className="icon-button" type="button" title="Sign out" aria-label="Sign out" onClick={() => auth && void signOut(auth)}><LogOut size={16} /></button>}
           </div>
         </header>
         {processProgress && <div className="global-progress" role="status">
@@ -180,16 +181,6 @@ function SignInCard({ onSignIn, error }: { onSignIn: () => void; error: string }
     <button className="google-button" onClick={onSignIn}><GoogleGlyph /> Continue with Google <ArrowRight size={16} /></button>
     {error && <p className="auth-error" role="alert">{friendlyError(error)}</p>}
     <div className="auth-footnote"><span className="tiny-dot" /> Firebase sign-in protects the review workspace.</div>
-  </div></div>
-}
-
-function SetupNotice() {
-  return <div className="auth-screen"><div className="auth-card setup-card">
-    <div className="auth-mark"><Database size={21} /></div>
-    <p className="eyebrow">FIREBASE SETUP</p>
-    <h1>Connect the workbench</h1>
-    <p className="auth-copy">Add the Firebase web configuration to <code>.env.local</code>, enable Cloud Firestore, and turn on Google in Firebase Authentication.</p>
-    <div className="setup-list"><span><Check size={15} /> Firestore database</span><span><Check size={15} /> Google sign-in provider</span><span><Check size={15} /> Authenticated Firestore rules</span></div>
   </div></div>
 }
 
