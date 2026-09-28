@@ -1,0 +1,27 @@
+import { createContext, useContext } from 'react'
+import type { User } from 'firebase/auth'
+import type { ProcessProgress } from './data/firestore'
+import type { CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
+
+export interface WorkspaceContextValue {
+  reviews: ReviewRecord[]
+  catalogs: Record<string, CatalogValue[]>
+  clusters: TopicClusterSummary[]
+  lastRun: ProcessingRun | null
+  user: User
+  loading: boolean
+  error: string
+  processProgress: ProcessProgress | null
+  processAll: () => Promise<void>
+  processOne: (review: ReviewRecord) => Promise<void>
+  openReview: (review: ReviewRecord) => void
+  clearProcessProgress: () => void
+}
+
+export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
+
+export function useWorkspace() {
+  const context = useContext(WorkspaceContext)
+  if (!context) throw new Error('Workspace context is missing.')
+  return context
+}
