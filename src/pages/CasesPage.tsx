@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangle, BriefcaseBusiness, CheckCircle2, Clock3, Search, ShieldCheck, Siren, Sparkles } from 'lucide-react'
-import { triageReview } from '../caseTriage'
+import { rulesCaseTriageProvider } from '../caseTriage'
 import { CaseDrawer } from '../components/CaseDrawer'
 import { slaPolicies } from '../data/firestore'
 import { useWorkspace } from '../context'
@@ -35,8 +35,8 @@ export function CasesPage() {
   const linkedReviewIds = useMemo(() => new Set(cases.flatMap((item) => item.review_ids)), [cases])
   const candidates = useMemo(() => reviews
     .filter((review) => !linkedReviewIds.has(review.id) && !createdIds.includes(review.id))
-    .map((review) => ({ review, triage: triageReview(review) }))
-    .filter((item) => item.triage.case_eligibility !== 'Insight only'), [reviews, linkedReviewIds, createdIds])
+    .map((review) => ({ review, triage: rulesCaseTriageProvider.triage(review, cases, reviews) }))
+    .filter((item) => item.triage.case_eligibility !== 'Insight only'), [reviews, cases, linkedReviewIds, createdIds])
   const teams = useMemo(() => [...new Set(cases.map((item) => item.owner_team))].sort(), [cases])
   const sources = useMemo(() => [...new Set([...cases.map((item) => item.source_channel), ...reviews.map((item) => item.voice_source)])].sort(), [cases, reviews])
   const matchingCases = useMemo(() => cases.filter((item) => {
@@ -58,7 +58,7 @@ export function CasesPage() {
   }), [candidates, priority, team, source, search])
 
   const selectMetric = (target: QueueFilter) => { setView('cases'); setQueue(target) }
-  const createCase = async (review: ReviewRecord, triage = triageReview(review)) => {
+  const createCase = async (review: ReviewRecord, triage = rulesCaseTriageProvider.triage(review, cases, reviews)) => {
     setCreatingId(review.id)
     setActionError('')
     try {
@@ -112,7 +112,7 @@ export function CasesPage() {
       </tbody></table> : <table className="data-table candidate-table"><thead><tr><th>REVIEW</th><th>TRIAGE</th><th>ISSUE TYPE · TEAM</th><th>CHANNEL</th><th>RECEIVED</th><th>ACTION</th></tr></thead><tbody>
         {matchingCandidates.map(({ review, triage }) => <tr key={review.id}>
           <td className="candidate-statement"><p>“{review.raw_text}”</p><span>{review.id} · {review.processing_status}</span></td>
-          <td><span className={`case-eligibility case-eligibility-${triage.case_eligibility === 'Actionable case' ? 'actionable' : 'review'}`}>{triage.case_eligibility}</span><small className="candidate-confidence">{Math.round(triage.confidence * 100)}% confidence{triage.risk_flags.length > 0 ? ' · supervisor review' : ''}</small></td>
+          <td><span className={`case-eligibility case-eligibility-${triage.case_eligibility === 'Actionable case' ? 'actionable' : 'review'}`}>{triage.case_eligibility}</span><small className="candidate-confidence">{Math.round(triage.confidence * 100)}% confidence{triage.risk_flags.length > 0 ? ' · supervisor review' : ''}{triage.possible_duplicate_case_ids.length > 0 ? ` · ${triage.possible_duplicate_case_ids.length} possible duplicate${triage.possible_duplicate_case_ids.length > 1 ? 's' : ''}` : ''}</small></td>
           <td>{triage.issue_type}<small className="candidate-team">{triage.suggested_team} · {triage.priority_suggestion}</small></td>
           <td>{compactSource(review.voice_source)}</td><td>{formatDate(review.feedback_at)}</td>
           <td><button className="button-secondary candidate-create" disabled={creatingId === review.id} onClick={() => void createCase(review, triage)}>{creatingId === review.id ? 'Creating…' : 'Create case'}</button></td>

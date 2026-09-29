@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { AlertCircle, BriefcaseBusiness, CircleHelp, Database, FileText, Inbox, LoaderCircle, RefreshCw, Tags } from 'lucide-react'
 import { auth, disableFirestoreData } from './firebase'
 import { createCustomerCase, ensureSeedData, listenCases, listenCatalogs, listenClusters, listenLastRun, listenReviews, processReviews, type ProcessProgress } from './data/firestore'
-import { triageReview } from './caseTriage'
+import { rulesCaseTriageProvider } from './caseTriage'
 import { CasesPage } from './pages/CasesPage'
 import { ProcessedPage } from './pages/ProcessedPage'
 import { ReviewsPage } from './pages/ReviewsPage'
@@ -130,11 +130,11 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
   }, [processTargets, reviews])
 
   const processOne = useCallback(async (review: ReviewRecord) => processTargets([review]), [processTargets])
-  const createCaseFromReview = useCallback(async (review: ReviewRecord, triage = triageReview(review)) => {
+  const createCaseFromReview = useCallback(async (review: ReviewRecord, triage = rulesCaseTriageProvider.triage(review, cases, reviews)) => {
     const existing = cases.find((customerCase) => customerCase.review_ids.includes(review.id))
     if (existing) return existing
     return createCustomerCase(review, triage, user.uid)
-  }, [cases, user.uid])
+  }, [cases, reviews, user.uid])
   const clearProcessProgress = useCallback(() => setProcessProgress(null), [])
   const value = useMemo(() => ({
     reviews, catalogs, clusters, cases, lastRun, user, loading, error, processProgress,
@@ -187,7 +187,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
           <Route path="/cases" element={<CasesPage />} />
           <Route path="*" element={<Navigate to="/reviews" replace />} />
         </Routes>
-        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} catalogs={catalogs} clusters={clusters} audit={audit} mode={location.pathname === '/processed' ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} existingCase={cases.find((customerCase) => customerCase.review_ids.includes(selectedReview.id))} onCreateCase={(review) => createCaseFromReview(review)} />}
+        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} cases={cases} catalogs={catalogs} clusters={clusters} audit={audit} mode={location.pathname === '/processed' ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} existingCase={cases.find((customerCase) => customerCase.review_ids.includes(selectedReview.id))} onCreateCase={(review) => createCaseFromReview(review)} />}
       </main>
     </div>
   </WorkspaceContext.Provider>

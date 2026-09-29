@@ -357,6 +357,7 @@ export function CaseDrawer({ customerCase, cases, reviews, clusters, userId, onC
           <p className="case-ai-explanation">{customerCase.ai_triage.explanation}</p>
           <div className="case-ai-grid"><CaseDatum label="Intent" value={customerCase.ai_triage.intent} /><CaseDatum label="Issue type" value={customerCase.ai_triage.issue_type} /><CaseDatum label="Suggested priority" value={customerCase.ai_triage.priority_suggestion} /><CaseDatum label="Suggested team" value={customerCase.ai_triage.suggested_team} /><CaseDatum label="Brand" value={customerCase.ai_triage.brand ?? 'Not identified'} /><CaseDatum label="Product" value={customerCase.ai_triage.product_category ?? 'Not identified'} /></div>
           {customerCase.ai_triage.risk_flags.length > 0 && <div className="case-risk-flags"><ShieldCheck size={14} />Supervisor review required · {customerCase.ai_triage.risk_flags.join(', ')}</div>}
+          {customerCase.ai_triage.possible_duplicate_case_ids.length > 0 && <div className="possible-duplicate-cases"><span>Possible duplicate cases · confirm before creating a separate case</span>{customerCase.ai_triage.possible_duplicate_case_ids.map((caseId) => cases.find((item) => item.id === caseId)).filter((item): item is CustomerCase => Boolean(item)).map((item) => <button key={item.id} onClick={() => onSelectCase(item.id)}><strong>{item.id}</strong><small>{item.subject}</small></button>)}</div>}
           <div className="case-rule-version">{customerCase.ai_triage.model_or_rule_version} · human confirmation required</div>
         </section>
 

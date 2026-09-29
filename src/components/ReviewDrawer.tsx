@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, ArrowUpRight, BriefcaseBusiness, Check, Clock3, FileText, LoaderCircle, Save, ShieldCheck, X } from 'lucide-react'
 import { addCorrectionAudit, saveAnnotation } from '../data/firestore'
-import { triageReview } from '../caseTriage'
+import { rulesCaseTriageProvider } from '../caseTriage'
 import { ReviewState, StatusPill } from './StatusPill'
 import { SentimentTag } from './SentimentTag'
 import { formatDate } from '../utils'
@@ -11,6 +11,7 @@ import type { Annotation, AuditEntry, CatalogValue, CustomerCase, ReviewRecord, 
 interface Props {
   review: ReviewRecord
   allReviews: ReviewRecord[]
+  cases: CustomerCase[]
   catalogs: Record<string, CatalogValue[]>
   clusters: TopicClusterSummary[]
   audit: AuditEntry[]
@@ -22,7 +23,7 @@ interface Props {
   onCreateCase: (review: ReviewRecord) => Promise<CustomerCase>
 }
 
-export function ReviewDrawer({ review, allReviews, catalogs, clusters, audit, mode, userId, onClose, onProcess, existingCase, onCreateCase }: Props) {
+export function ReviewDrawer({ review, allReviews, cases, catalogs, clusters, audit, mode, userId, onClose, onProcess, existingCase, onCreateCase }: Props) {
   const [draft, setDraft] = useState<Annotation | null>(review.annotation ? structuredClone(review.annotation) : null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -33,7 +34,7 @@ export function ReviewDrawer({ review, allReviews, catalogs, clusters, audit, mo
   const annotation = review.annotation
   const cluster = clusters.find((item) => item.id === annotation?.cluster_id)
   const productOptions = catalogs.productCategories ?? []
-  const triage = triageReview(review)
+  const triage = rulesCaseTriageProvider.triage(review, cases, allReviews)
 
   useEffect(() => {
     setDraft(review.annotation ? structuredClone(review.annotation) : null)

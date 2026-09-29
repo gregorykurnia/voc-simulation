@@ -1,8 +1,14 @@
-import type { CasePriority, CaseTriage, ReviewRecord } from './types'
+import type { CasePriority, CaseTriage, CustomerCase, ReviewRecord } from './types'
 
 const rulesVersion = 'Rules v1.0'
 
-export function triageReview(review: ReviewRecord): CaseTriage {
+export interface CaseTriageProvider {
+  id: string
+  version: string
+  triage: (review: ReviewRecord, cases: CustomerCase[], reviews: ReviewRecord[]) => CaseTriage
+}
+
+export function triageReview(review: ReviewRecord, cases: CustomerCase[] = [], reviews: ReviewRecord[] = []): CaseTriage {
   const text = review.raw_text.toLocaleLowerCase('id-ID')
   const risks: string[] = []
   if (/akun.*(dibobol|diambil alih|diretas)|kata sandi|password|data pribadi|privasi/.test(text)) risks.push('Privacy / account security')
@@ -47,9 +53,13 @@ export function triageReview(review: ReviewRecord): CaseTriage {
   const product = review.annotation?.product_category ?? inferProduct(text)
   const sentiment = review.annotation?.sentiment ?? (/rusak|bermasalah|pudar|luntur|menyusut|salah|terlambat|belum|komplain|keluhan|gagal|tidak puas/.test(text) ? 'Negative' : positiveOnly ? 'Positive' : 'Neutral')
   const suggestedTeam = inferTeam(text, issue)
+  const possibleDuplicateCaseIds = findPossibleDuplicates(review, issue, brand, product, cases, reviews)
   const responseDraft = eligibility === 'Actionable case' || eligibility === 'Needs review'
     ? 'Halo, terima kasih sudah menghubungi kami. Kami akan membantu meninjau hal ini. Jika berkenan, kirimkan detail yang relevan agar tim kami dapat memeriksa lebih lanjut.'
     : ''
+  if (possibleDuplicateCaseIds.length) {
+    explanation += ` Similar open cases may already exist (${possibleDuplicateCaseIds.join(', ')}); review them before creating another case.`
+  }
 
   return {
     case_eligibility: eligibility,
@@ -63,12 +73,44 @@ export function triageReview(review: ReviewRecord): CaseTriage {
     store: null,
     sentiment,
     risk_flags: risks,
-    possible_duplicate_case_ids: [],
+    possible_duplicate_case_ids: possibleDuplicateCaseIds,
     response_draft: responseDraft,
     confidence,
     explanation,
     model_or_rule_version: rulesVersion,
   }
+}
+
+export const rulesCaseTriageProvider: CaseTriageProvider = {
+  id: 'rules-v1',
+  version: rulesVersion,
+  triage: triageReview,
+}
+
+function findPossibleDuplicates(review: ReviewRecord, issue: string, brand: string | null, product: string | null, cases: CustomerCase[], reviews: ReviewRecord[]) {
+  const currentTokens = significantTokens(review.raw_text)
+  if (!currentTokens.size) return []
+  return cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status) && !customerCase.review_ids.includes(review.id))
+    .map((customerCase) => {
+      const sameIssue = customerCase.issue_type === issue || customerCase.ai_triage.issue_type === issue
+      const sameProduct = Boolean((brand && customerCase.brand === brand) || (product && customerCase.product_category === product))
+      const linkedTexts = customerCase.review_ids.map((id) => reviews.find((item) => item.id === id)?.raw_text ?? '').filter(Boolean)
+      const evidence = linkedTexts.join(' ') || customerCase.subject
+      const duplicateTokens = significantTokens(evidence)
+      const shared = [...currentTokens].filter((token) => duplicateTokens.has(token)).length
+      const similarity = shared / Math.max(1, new Set([...currentTokens, ...duplicateTokens]).size)
+      const threshold = sameIssue && sameProduct ? 0.16 : sameIssue ? 0.42 : sameProduct ? 0.55 : 1
+      return { id: customerCase.id, similarity, qualifies: similarity >= threshold }
+    })
+    .filter((item) => item.qualifies)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 3)
+    .map((item) => item.id)
+}
+
+function significantTokens(value: string) {
+  const stopwords = new Set(['yang', 'dan', 'atau', 'dengan', 'untuk', 'dari', 'saya', 'kami', 'ini', 'itu', 'ada', 'sudah', 'belum', 'bisa', 'tidak', 'nggak', 'aku', 'saat', 'kalau', 'karena', 'setelah', 'sebelum', 'please', 'the', 'this', 'that', 'with', 'have', 'has', 'was', 'were', 'from', 'your', 'you', 'are', 'for'])
+  return new Set(value.toLocaleLowerCase('id-ID').match(/[a-z0-9]{4,}/g)?.filter((token) => !stopwords.has(token)) ?? [])
 }
 
 function inferIntent(text: string) {
