@@ -164,8 +164,16 @@ export interface CustomerCase {
   first_response_due_at: string
   resolution_due_at: string
   first_response_at: string | null
+  sla_paused_at?: string | null
   resolved_at: string | null
   closed_at: string | null
+  escalated_to?: string | null
+  requested_priority?: CasePriority | null
+  requested_sla_policy_id?: string | null
+  supervisor_review_state?: 'Not required' | 'Pending' | 'Approved' | 'Returned'
+  supervisor_review_note?: string
+  qa_review_state?: 'Not required' | 'Pending' | 'Approved' | 'Returned'
+  qa_review_note?: string
   ai_triage: CaseTriage
   resolution: CaseResolution | null
   learning: CaseLearning | null

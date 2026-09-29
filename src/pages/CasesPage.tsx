@@ -28,6 +28,7 @@ export function CasesPage() {
   const activeCases = cases.filter((item) => !['Resolved', 'Closed'].includes(item.status))
   const needsTriage = cases.filter((item) => item.status === 'Needs triage')
   const slaAtRisk = activeCases.filter((item) => isSlaAtRisk(item, now))
+  const slaBreached = activeCases.filter((item) => isSlaBreached(item, now))
   const supervisorQueue = cases.filter((item) => item.status === 'Needs supervisor review')
   const escalated = cases.filter((item) => item.status === 'Escalated')
   const resolvedThisWeek = cases.filter((item) => item.resolved_at && now - new Date(item.resolved_at).getTime() < 7 * 86400000).length
@@ -79,6 +80,8 @@ export function CasesPage() {
       </div>
       <button className={`button-secondary case-view-toggle ${view === 'candidates' ? 'selected' : ''}`} onClick={() => { setView(view === 'cases' ? 'candidates' : 'cases'); setQueue('All cases') }}><Sparkles size={15} />{view === 'candidates' ? 'View case queue' : `Actionable candidates · ${candidates.length}`}</button>
     </div>
+
+    {slaAtRisk.length > 0 && <div className="case-sla-alert" role="status"><AlertTriangle size={16} /><span><strong>{slaBreached.length ? `${slaBreached.length} breached` : 'SLA attention needed'}</strong> · {slaAtRisk.length} {slaAtRisk.length === 1 ? 'case is' : 'cases are'} due soon or overdue. The supervisor queue should review these cases.</span><button onClick={() => selectMetric('SLA at risk')}>Review SLA cases →</button></div>}
 
     <div className="metrics-strip cases-metrics" aria-label="Case queue summary">
       <Metric icon={<BriefcaseBusiness size={15} />} label="Open cases" value={activeCases.length} detail="Awaiting a resolution" onClick={() => selectMetric('All cases')} />
@@ -161,7 +164,14 @@ function isSlaAtRisk(item: CustomerCase, now: number) {
   const paused = slaPolicies.find((policy) => policy.id === item.sla_policy_id)?.pause_statuses.includes(item.status) ?? false
   const dueAt = item.first_response_at ? item.resolution_due_at : item.first_response_due_at
   const remaining = new Date(dueAt).getTime() - now
-  return !paused && remaining > 0 && remaining <= 2 * 60 * 60 * 1000
+  return !paused && remaining <= 2 * 60 * 60 * 1000
+}
+
+function isSlaBreached(item: CustomerCase, now: number) {
+  if (['Resolved', 'Closed'].includes(item.status)) return false
+  const paused = slaPolicies.find((policy) => policy.id === item.sla_policy_id)?.pause_statuses.includes(item.status) ?? false
+  const dueAt = item.first_response_at ? item.resolution_due_at : item.first_response_due_at
+  return !paused && new Date(dueAt).getTime() < now
 }
 
 function formatRemaining(milliseconds: number) {

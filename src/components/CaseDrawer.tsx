@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check, Clock3, FileText, LoaderCircle, MessageSquare, Plus, Send, ShieldCheck, Sparkles, StickyNote, X } from 'lucide-react'
 import { addCaseMessage, listenCaseEvents, listenCaseMessages, slaPolicies, updateCustomerCase } from '../data/firestore'
-import type { CaseEvent, CaseMessage, CaseStatus, CustomerCase, ReviewRecord } from '../types'
+import type { CaseEvent, CaseMessage, CasePriority, CaseStatus, CustomerCase, ReviewRecord } from '../types'
 import { compactSource, formatDate } from '../utils'
 
 interface Props {
@@ -17,10 +17,10 @@ interface Props {
 const transitions: Record<CaseStatus, CaseStatus[]> = {
   'Needs triage': ['In review', 'Needs supervisor review'],
   'In review': ['In progress', 'Needs supervisor review'],
-  'In progress': ['Pending customer', 'Pending internal / store', 'Needs supervisor review', 'Escalated'],
+  'In progress': ['Pending customer', 'Pending internal / store', 'Needs supervisor review'],
   'Pending customer': ['In progress', 'Needs supervisor review'],
-  'Pending internal / store': ['In progress', 'Escalated', 'Needs supervisor review'],
-  'Needs supervisor review': ['In progress', 'Pending internal / store', 'Escalated'],
+  'Pending internal / store': ['In progress', 'Needs supervisor review'],
+  'Needs supervisor review': ['In progress', 'Pending internal / store'],
   Escalated: ['In progress', 'Pending internal / store', 'Needs supervisor review'],
   Resolved: ['Reopened'],
   Closed: ['Reopened'],
@@ -35,6 +35,10 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
   const [noteDraft, setNoteDraft] = useState('')
   const [responseDraft, setResponseDraft] = useState(customerCase.ai_triage.response_draft)
   const [linkReviewId, setLinkReviewId] = useState('')
+  const [requestedPriority, setRequestedPriority] = useState<CasePriority>(customerCase.requested_priority ?? customerCase.priority)
+  const [requestedPolicyId, setRequestedPolicyId] = useState(customerCase.requested_sla_policy_id ?? customerCase.sla_policy_id)
+  const [supervisorNote, setSupervisorNote] = useState(customerCase.supervisor_review_note ?? '')
+  const [escalationTeam, setEscalationTeam] = useState('Store Operations')
   const [busyAction, setBusyAction] = useState('')
   const [error, setError] = useState('')
 
@@ -47,8 +51,12 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
   useEffect(() => {
     setNoteDraft('')
     setResponseDraft(customerCase.ai_triage.response_draft)
+    setRequestedPriority(customerCase.requested_priority ?? customerCase.priority)
+    setRequestedPolicyId(customerCase.requested_sla_policy_id ?? customerCase.sla_policy_id)
+    setSupervisorNote(customerCase.supervisor_review_note ?? '')
+    setEscalationTeam(customerCase.escalated_to ?? 'Store Operations')
     setError('')
-  }, [customerCase.id, customerCase.ai_triage.response_draft])
+  }, [customerCase.id, customerCase.ai_triage.response_draft, customerCase.priority, customerCase.sla_policy_id, customerCase.requested_priority, customerCase.requested_sla_policy_id, customerCase.supervisor_review_note, customerCase.escalated_to])
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -59,7 +67,8 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
   }, [onClose])
 
   const linkedReviews = customerCase.review_ids.map((id) => reviews.find((review) => review.id === id)).filter((item): item is ReviewRecord => Boolean(item))
-  const availableReviews = reviews.filter((review) => !customerCase.review_ids.includes(review.id))
+  const caseLinkedReviewIds = new Set(cases.flatMap((item) => item.review_ids))
+  const availableReviews = reviews.filter((review) => !caseLinkedReviewIds.has(review.id))
   const relatedCases = useMemo(() => cases
     .filter((item) => item.id !== customerCase.id && (item.issue_type === customerCase.issue_type || (customerCase.brand && item.brand === customerCase.brand)))
     .slice(0, 5), [cases, customerCase.id, customerCase.issue_type, customerCase.brand])
@@ -87,7 +96,12 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
   const paused = policy?.pause_statuses.includes(customerCase.status) ?? false
   const slaDeadline = customerCase.first_response_at ? customerCase.resolution_due_at : customerCase.first_response_due_at
   const slaRemaining = new Date(slaDeadline).getTime() - Date.now()
-  const nextStatuses = transitions[customerCase.status]
+  const supervisorPending = customerCase.supervisor_review_state === 'Pending'
+  const nextStatuses = customerCase.status === 'Needs supervisor review' && supervisorPending ? [] : transitions[customerCase.status]
+  const supervisorReviewRequired = customerCase.ai_triage.risk_flags.length > 0 || customerCase.priority === 'Critical' || Boolean(customerCase.requested_priority || customerCase.requested_sla_policy_id) || ['Pending', 'Approved', 'Returned'].includes(customerCase.supervisor_review_state ?? '')
+  const canEscalate = !['Resolved', 'Closed'].includes(customerCase.status)
+  const supervisorRequestChanged = requestedPriority !== customerCase.priority || requestedPolicyId !== customerCase.sla_policy_id
+  const supervisorRequestDisabled = !supervisorRequestChanged && (!supervisorReviewRequired || customerCase.supervisor_review_state === 'Approved')
 
   const runAction = async (key: string, action: () => Promise<unknown>) => {
     setBusyAction(key)
@@ -98,12 +112,22 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
   }
   const changeStatus = (status: CaseStatus) => {
     const reopened = status === 'Reopened'
+    const startsSupervisorReview = status === 'Needs supervisor review'
+    const now = new Date()
+    const slaChanges: Partial<CustomerCase> = status === 'Pending customer'
+      ? { sla_paused_at: now.toISOString() }
+      : customerCase.status === 'Pending customer'
+        ? {
+            sla_paused_at: null,
+            resolution_due_at: new Date(new Date(customerCase.resolution_due_at).getTime() + Math.max(0, now.getTime() - new Date(customerCase.sla_paused_at ?? now.toISOString()).getTime())).toISOString(),
+          }
+        : {}
     void runAction('status', () => updateCustomerCase(
       customerCase.id,
-      { status, ...(reopened ? { resolved_at: null, closed_at: null, resolution: customerCase.resolution ? { ...customerCase.resolution, reopen_reason: 'Customer or agent requested follow-up.' } : null } : {}) },
+      { ...slaChanges, status, ...(startsSupervisorReview ? { supervisor_review_state: 'Pending' as const } : {}), ...(reopened ? { resolved_at: null, closed_at: null, sla_paused_at: null, supervisor_review_state: 'Pending' as const, qa_review_state: 'Pending' as const } : {}) },
       userId,
-      reopened ? 'Reopened' : 'Status change',
-      reopened ? 'Case reopened and returned for follow-up' : `Status changed to ${status}`,
+      reopened ? 'Reopened' : startsSupervisorReview ? 'Supervisor decision' : 'Status change',
+      reopened ? 'Case reopened and returned for follow-up' : startsSupervisorReview ? 'Supervisor review requested' : `Status changed to ${status}`,
     ))
   }
   const changeTeam = (ownerTeam: string) => void runAction('team', () => updateCustomerCase(customerCase.id, { owner_team: ownerTeam }, userId, 'Assignment', `Assigned to ${ownerTeam}`))
@@ -128,6 +152,52 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
     })
   }
 
+  const requestSupervisorReview = () => {
+    const policyChanged = requestedPolicyId !== customerCase.sla_policy_id
+    const priorityChanged = requestedPriority !== customerCase.priority
+    if (!policyChanged && !priorityChanged && customerCase.supervisor_review_state !== 'Pending' && !supervisorReviewRequired) return
+    void runAction('supervisor-request', () => updateCustomerCase(customerCase.id, {
+      status: 'Needs supervisor review',
+      supervisor_review_state: 'Pending',
+      supervisor_review_note: supervisorNote.trim(),
+      requested_priority: priorityChanged ? requestedPriority : null,
+      requested_sla_policy_id: policyChanged ? requestedPolicyId : null,
+    }, userId, 'Supervisor decision', 'Priority or SLA review requested'))
+  }
+  const approveSupervisorReview = () => {
+    const requestedPolicy = slaPolicies.find((item) => item.id === customerCase.requested_sla_policy_id)
+    const now = new Date()
+    const changes: Partial<CustomerCase> = {
+      supervisor_review_state: 'Approved',
+      supervisor_user_id: userId,
+      supervisor_review_note: supervisorNote.trim() || 'Approved in the supervisor review queue.',
+      requested_priority: null,
+      requested_sla_policy_id: null,
+      status: customerCase.status === 'Needs supervisor review' ? 'In progress' : customerCase.status,
+    }
+    if (customerCase.requested_priority) changes.priority = customerCase.requested_priority
+    if (requestedPolicy) {
+      changes.sla_policy_id = requestedPolicy.id
+      if (!customerCase.first_response_at) changes.first_response_due_at = new Date(now.getTime() + requestedPolicy.first_response_minutes * 60000).toISOString()
+      changes.resolution_due_at = new Date(now.getTime() + requestedPolicy.resolution_minutes * 60000).toISOString()
+    }
+    void runAction('supervisor-approve', () => updateCustomerCase(customerCase.id, changes, userId, 'Supervisor decision', 'Supervisor approved case priority, SLA, and routing'))
+  }
+  const returnToAgent = () => void runAction('supervisor-return', () => updateCustomerCase(customerCase.id, {
+    status: 'In review',
+    supervisor_review_state: 'Returned',
+    supervisor_review_note: supervisorNote.trim() || 'Returned for more evidence.',
+    requested_priority: null,
+    requested_sla_policy_id: null,
+  }, userId, 'Supervisor decision', 'Case returned to the agent for clarification'))
+  const escalateCase = () => {
+    if (!escalationTeam) return
+    void runAction('escalate', () => updateCustomerCase(customerCase.id, {
+      status: 'Escalated',
+      escalated_to: escalationTeam,
+    }, userId, 'Escalation', `Escalated to ${escalationTeam}; original case owner retained`))
+  }
+
   return <div className="drawer-scrim case-drawer-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <aside className="review-drawer case-drawer" role="dialog" aria-modal="true" aria-labelledby="case-drawer-title">
       <header className="drawer-header case-drawer-header"><div><span className="drawer-eyebrow">CUSTOMER SERVICE CASE</span><h2 id="case-drawer-title">{customerCase.id}</h2></div><div className="case-header-actions"><span className={`case-priority priority-${customerCase.priority.toLowerCase()}`}>{customerCase.priority}</span><span className={`case-status status-${slug(customerCase.status)}`}>{customerCase.status}</span><button className="icon-button drawer-close" onClick={onClose} aria-label="Close case details"><X size={18} /></button></div></header>
@@ -139,8 +209,22 @@ export function CaseDrawer({ customerCase, cases, reviews, userId, onClose, onOp
             <label><span>Assigned agent</span><select value={customerCase.owner_user_id ?? ''} disabled={busyAction === 'owner'} onChange={(event) => changeOwner(event.target.value || null)}><option value="">Unassigned</option><option value={userId}>You · {userId === 'browser-demo' ? 'Demo agent' : 'Current agent'}</option></select></label>
             <label><span>Assigned team</span><select value={customerCase.owner_team} disabled={busyAction === 'team'} onChange={(event) => changeTeam(event.target.value)}>{[...new Set([...teams, customerCase.owner_team])].map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
-          <div className="case-transition-row"><label><span>Move case to</span><select value="" disabled={!nextStatuses.length || busyAction === 'status'} onChange={(event) => { if (event.target.value) changeStatus(event.target.value as CaseStatus) }}><option value="">Choose next status…</option>{nextStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><span>Changes are recorded in the case history.</span></div>
+          <div className="case-transition-row"><label><span>Move case to</span><select value="" disabled={!nextStatuses.length || busyAction === 'status'} onChange={(event) => { if (event.target.value) changeStatus(event.target.value as CaseStatus) }}><option value="">{supervisorPending ? 'Waiting for supervisor review…' : 'Choose next status…'}</option>{nextStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label><span>Changes are recorded in the case history.</span></div>
         </section>
+
+        {(supervisorReviewRequired || canEscalate) && <section className="drawer-section supervisor-controls-section">
+          <div className="drawer-section-title"><h3><ShieldCheck size={14} />{supervisorReviewRequired ? 'Supervisor review' : 'Priority, SLA & escalation'}</h3><span className={`case-status ${supervisorPending ? 'status-needs-supervisor-review' : customerCase.supervisor_review_state === 'Approved' ? 'status-resolved' : ''}`}>{customerCase.supervisor_review_state ?? 'Review required'}</span></div>
+          {customerCase.ai_triage.risk_flags.length > 0 && <p className="supervisor-risk-note"><AlertTriangle size={13} /> Review required for: {customerCase.ai_triage.risk_flags.join(', ')}</p>}
+          <div className="supervisor-override-grid">
+            <label><span>Priority request</span><select value={requestedPriority} disabled={supervisorPending} onChange={(event) => setRequestedPriority(event.target.value as CasePriority)}>{['Critical', 'High', 'Normal', 'Low'].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label><span>SLA policy request</span><select value={requestedPolicyId} disabled={supervisorPending} onChange={(event) => setRequestedPolicyId(event.target.value)}>{slaPolicies.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.first_response_minutes / 60}h response / {item.resolution_minutes / 60}h resolution</option>)}</select></label>
+          </div>
+          <label className="case-compose-label supervisor-note"><span>Decision note / reason</span><textarea value={supervisorNote} disabled={customerCase.supervisor_review_state === 'Approved'} onChange={(event) => setSupervisorNote(event.target.value)} placeholder="Record the evidence or reason for this decision…" rows={2} /></label>
+          {supervisorPending ? <div className="supervisor-decision-actions"><button className="button-primary case-submit-button" disabled={busyAction === 'supervisor-approve'} onClick={approveSupervisorReview}>{busyAction === 'supervisor-approve' ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />} Approve review</button><button className="button-secondary case-submit-button" disabled={busyAction === 'supervisor-return'} onClick={returnToAgent}>Return to agent</button></div>
+            : <button className="button-secondary case-submit-button" disabled={busyAction === 'supervisor-request' || supervisorRequestDisabled} onClick={requestSupervisorReview}>{busyAction === 'supervisor-request' ? <LoaderCircle size={14} className="spin" /> : <ShieldCheck size={14} />} {customerCase.supervisor_review_state === 'Returned' ? 'Resubmit for supervisor review' : 'Request priority / SLA override'}</button>}
+          <div className="case-escalation-control"><div><strong>Specialist escalation</strong><small>{customerCase.escalated_to ? `Currently with ${customerCase.escalated_to}; original owner retained.` : 'Route work while retaining the original owner and history.'}</small></div><div className="case-escalation-actions"><select aria-label="Escalation destination" value={escalationTeam} onChange={(event) => setEscalationTeam(event.target.value)}>{['Store Operations', 'Logistics', 'Product Team', 'Finance', 'Technology'].map((item) => <option key={item}>{item}</option>)}</select><button className="button-secondary" disabled={!canEscalate || busyAction === 'escalate'} onClick={escalateCase}>{busyAction === 'escalate' ? 'Routing…' : 'Escalate'}</button></div></div>
+          <p className="case-prototype-note">Supervisor controls are simulated for this single-role prototype. Every decision is written to case history.</p>
+        </section>}
 
         <section className="drawer-section">
           <div className="drawer-section-title"><h3>Customer evidence</h3><span className="cluster-context-count">{customerCase.review_ids.length} linked</span></div>
