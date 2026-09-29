@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { ProcessProgress } from './data/firestore'
-import type { CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
+import type { CaseTriage, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
 
 export interface WorkspaceUser {
   uid: string
@@ -12,6 +12,7 @@ export interface WorkspaceContextValue {
   reviews: ReviewRecord[]
   catalogs: Record<string, CatalogValue[]>
   clusters: TopicClusterSummary[]
+  cases: CustomerCase[]
   lastRun: ProcessingRun | null
   user: WorkspaceUser
   loading: boolean
@@ -20,6 +21,7 @@ export interface WorkspaceContextValue {
   processAll: () => Promise<void>
   processOne: (review: ReviewRecord) => Promise<void>
   openReview: (review: ReviewRecord) => void
+  createCaseFromReview: (review: ReviewRecord, triage: CaseTriage) => Promise<CustomerCase>
   clearProcessProgress: () => void
 }
 

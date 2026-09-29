@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlertCircle, ArrowUpRight, Check, Clock3, FileText, LoaderCircle, Save, ShieldCheck, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertCircle, ArrowUpRight, BriefcaseBusiness, Check, Clock3, FileText, LoaderCircle, Save, ShieldCheck, X } from 'lucide-react'
 import { addCorrectionAudit, saveAnnotation } from '../data/firestore'
+import { triageReview } from '../caseTriage'
 import { ReviewState, StatusPill } from './StatusPill'
 import { SentimentTag } from './SentimentTag'
 import { formatDate } from '../utils'
-import type { Annotation, AuditEntry, CatalogValue, ReviewRecord, TopicClusterSummary } from '../types'
+import type { Annotation, AuditEntry, CatalogValue, CustomerCase, ReviewRecord, TopicClusterSummary } from '../types'
 
 interface Props {
   review: ReviewRecord
@@ -16,21 +18,29 @@ interface Props {
   userId: string
   onClose: () => void
   onProcess: () => void
+  existingCase?: CustomerCase
+  onCreateCase: (review: ReviewRecord) => Promise<CustomerCase>
 }
 
-export function ReviewDrawer({ review, allReviews, catalogs, clusters, audit, mode, userId, onClose, onProcess }: Props) {
+export function ReviewDrawer({ review, allReviews, catalogs, clusters, audit, mode, userId, onClose, onProcess, existingCase, onCreateCase }: Props) {
   const [draft, setDraft] = useState<Annotation | null>(review.annotation ? structuredClone(review.annotation) : null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [localError, setLocalError] = useState('')
+  const [caseError, setCaseError] = useState('')
+  const [caseSaving, setCaseSaving] = useState(false)
+  const [createdCase, setCreatedCase] = useState<CustomerCase | null>(null)
   const annotation = review.annotation
   const cluster = clusters.find((item) => item.id === annotation?.cluster_id)
   const productOptions = catalogs.productCategories ?? []
+  const triage = triageReview(review)
 
   useEffect(() => {
     setDraft(review.annotation ? structuredClone(review.annotation) : null)
     setSaved(false)
     setLocalError('')
+    setCaseError('')
+    setCreatedCase(null)
   }, [review.id, review.annotation?.processed_at])
 
   useEffect(() => {
@@ -94,6 +104,21 @@ export function ReviewDrawer({ review, allReviews, catalogs, clusters, audit, mo
         <section className="drawer-section">
           <div className="drawer-section-title"><h3>Source metadata</h3><StatusPill status={review.processing_status} compact /></div>
           <div className="metadata-grid"><Metadata label="Voice source" value={review.voice_source} /><Metadata label="Source detail" value={review.source_detail} /><Metadata label="Received" value={formatDate(review.feedback_at, true)} /><Metadata label="Dataset" value="Synthetic proxy · fictional record" /></div>
+        </section>
+
+        <section className="drawer-section case-triage-card">
+          <div className="drawer-section-title"><h3>Case triage</h3><span className={`case-eligibility case-eligibility-${triage.case_eligibility === 'Actionable case' ? 'actionable' : triage.case_eligibility === 'Needs review' ? 'review' : 'insight'}`}>{triage.case_eligibility}</span></div>
+          <p>{triage.explanation}</p>
+          <div className="case-triage-meta"><span>{triage.issue_type}</span><span>{triage.priority_suggestion} priority</span><span>{Math.round(triage.confidence * 100)}% confidence</span></div>
+          {triage.risk_flags.length > 0 && <div className="case-risk-flags"><ShieldCheck size={13} /> Supervisor review · {triage.risk_flags.join(', ')}</div>}
+          {existingCase || createdCase
+            ? <Link className="button-secondary case-create-button" to="/cases"><BriefcaseBusiness size={15} /> Open case {(existingCase ?? createdCase)!.id}</Link>
+            : <button className="button-secondary case-create-button" disabled={caseSaving} onClick={() => {
+              setCaseSaving(true)
+              setCaseError('')
+              void onCreateCase(review).then(setCreatedCase).catch((error: unknown) => setCaseError(error instanceof Error ? error.message : 'The case could not be created.')).finally(() => setCaseSaving(false))
+            }}>{caseSaving ? <LoaderCircle size={15} className="spin" /> : <BriefcaseBusiness size={15} />} Create case from review</button>}
+          {caseError && <div className="drawer-error"><AlertCircle size={14} />{caseError}</div>}
         </section>
 
         {annotation && draft ? <>

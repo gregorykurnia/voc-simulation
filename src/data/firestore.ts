@@ -16,7 +16,7 @@ import { db } from '../firebase'
 import { catalogs, topicClusters } from './taxonomy'
 import { seedByChannel, seedStatementCount } from './seedStatements'
 import { annotateReview } from '../processor'
-import type { Annotation, AuditEntry, CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from '../types'
+import type { Annotation, AuditEntry, CaseEvent, CaseMessage, CaseTriage, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, SLAPolicy, TopicClusterSummary } from '../types'
 
 interface DemoStore {
   reviews: ReviewRecord[]
@@ -24,6 +24,9 @@ interface DemoStore {
   clusters: TopicClusterSummary[]
   lastRun: ProcessingRun | null
   audits: AuditEntry[]
+  cases: CustomerCase[]
+  caseEvents: CaseEvent[]
+  caseMessages: CaseMessage[]
 }
 
 const demoStorageKey = 'delami-signals-demo-v1'
@@ -41,7 +44,16 @@ function readDemoStore(): DemoStore | null {
     if (!raw) return null
     const value = JSON.parse(raw) as Partial<DemoStore>
     if (!Array.isArray(value.reviews) || !value.catalogs || !Array.isArray(value.clusters)) return null
-    return { reviews: value.reviews, catalogs: value.catalogs, clusters: value.clusters, lastRun: value.lastRun ?? null, audits: value.audits ?? [] }
+    return {
+      reviews: value.reviews,
+      catalogs: value.catalogs,
+      clusters: value.clusters,
+      lastRun: value.lastRun ?? null,
+      audits: value.audits ?? [],
+      cases: value.cases ?? [],
+      caseEvents: value.caseEvents ?? [],
+      caseMessages: value.caseMessages ?? [],
+    }
   } catch {
     return null
   }
@@ -78,6 +90,9 @@ function createDemoStore(): DemoStore {
     clusters: topicClusters.map((cluster) => ({ ...cluster, review_count: 0, sentiment_mix: {}, representative_review_ids: [] })),
     lastRun: null,
     audits: [],
+    cases: [],
+    caseEvents: [],
+    caseMessages: [],
   }
 }
 
@@ -153,6 +168,160 @@ export function listenReviews(onChange: (reviews: ReviewRecord[]) => void, onErr
     reviews.sort((a, b) => b.feedback_at.localeCompare(a.feedback_at))
     onChange(reviews)
   }, (error) => onError(error))
+}
+
+export const slaPolicies: SLAPolicy[] = [
+  { id: 'critical', label: 'Critical', first_response_minutes: 60, resolution_minutes: 240, pause_statuses: ['Pending customer'], escalation_minutes_before_due: 30 },
+  { id: 'high', label: 'High', first_response_minutes: 120, resolution_minutes: 480, pause_statuses: ['Pending customer'], escalation_minutes_before_due: 60 },
+  { id: 'normal', label: 'Normal', first_response_minutes: 240, resolution_minutes: 1440, pause_statuses: ['Pending customer'], escalation_minutes_before_due: 120 },
+  { id: 'low', label: 'Low', first_response_minutes: 480, resolution_minutes: 2880, pause_statuses: ['Pending customer'], escalation_minutes_before_due: 240 },
+]
+
+export function listenCases(onChange: (cases: CustomerCase[]) => void, onError: (error: Error) => void): Unsubscribe {
+  if (!db) return listenToDemo(() => onChange([...currentDemoStore().cases].sort((a, b) => b.updated_at.localeCompare(a.updated_at))))
+  return onSnapshot(query(collection(database(), 'cases'), orderBy('updated_at', 'desc')), (snapshot) => {
+    onChange(snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as CustomerCase)))
+  }, onError)
+}
+
+export function listenCaseEvents(caseId: string, onChange: (events: CaseEvent[]) => void, onError: (error: Error) => void): Unsubscribe {
+  if (!db) return listenToDemo(() => onChange(currentDemoStore().caseEvents.filter((event) => event.case_id === caseId).sort((a, b) => a.created_at.localeCompare(b.created_at))))
+  return onSnapshot(query(collection(database(), 'caseEvents'), where('case_id', '==', caseId)), (snapshot) => {
+    onChange(snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as CaseEvent)).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+  }, onError)
+}
+
+export function listenCaseMessages(caseId: string, onChange: (messages: CaseMessage[]) => void, onError: (error: Error) => void): Unsubscribe {
+  if (!db) return listenToDemo(() => onChange(currentDemoStore().caseMessages.filter((message) => message.case_id === caseId).sort((a, b) => a.created_at.localeCompare(b.created_at))))
+  return onSnapshot(query(collection(database(), 'caseMessages'), where('case_id', '==', caseId)), (snapshot) => {
+    onChange(snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as CaseMessage)).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+  }, onError)
+}
+
+export async function createCustomerCase(review: ReviewRecord, triage: CaseTriage, userId: string) {
+  const now = new Date()
+  const policy = slaPolicies.find((item) => item.id === triage.sla_policy_suggestion) ?? slaPolicies[2]
+  const createdAt = now.toISOString()
+  const addMinutes = (minutes: number) => new Date(now.getTime() + minutes * 60000).toISOString()
+  const caseId = `CASE-${now.getUTCFullYear()}-${now.getTime().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`
+  const status: CustomerCase['status'] = triage.risk_flags.length
+    ? 'Needs supervisor review'
+    : triage.case_eligibility === 'Needs review' || triage.confidence < 0.6
+      ? 'Needs triage'
+      : 'In review'
+  const customerCase: CustomerCase = {
+    id: caseId,
+    status,
+    priority: triage.priority_suggestion,
+    subject: `${triage.issue_type}: ${review.raw_text.slice(0, 82)}${review.raw_text.length > 82 ? '…' : ''}`,
+    review_ids: [review.id],
+    primary_review_id: review.id,
+    customer_reference: null,
+    source_channel: review.voice_source,
+    brand: triage.brand,
+    product_category: triage.product_category,
+    issue_type: triage.issue_type,
+    store_id: review.annotation?.store_id ?? null,
+    owner_user_id: null,
+    owner_team: triage.suggested_team,
+    supervisor_user_id: null,
+    sla_policy_id: policy.id,
+    first_response_due_at: addMinutes(policy.first_response_minutes),
+    resolution_due_at: addMinutes(policy.resolution_minutes),
+    first_response_at: null,
+    resolved_at: null,
+    closed_at: null,
+    ai_triage: triage,
+    resolution: null,
+    learning: null,
+    created_at: createdAt,
+    updated_at: createdAt,
+    last_activity_at: createdAt,
+  }
+  const event = makeCaseEvent(caseId, 'Created', `Case created from ${review.id} · ${status}`, userId, createdAt)
+  const message: CaseMessage = {
+    id: `${caseId}-MSG-1`,
+    case_id: caseId,
+    direction: 'Inbound',
+    channel: review.voice_source,
+    body: review.raw_text,
+    author_user_id: 'customer',
+    created_at: review.feedback_at,
+    delivery_state: 'Delivered',
+  }
+
+  if (!db) {
+    const store = currentDemoStore()
+    saveDemoStore({ ...store, cases: [customerCase, ...store.cases], caseEvents: [...store.caseEvents, event], caseMessages: [...store.caseMessages, message] })
+    return customerCase
+  }
+  const firestore = database()
+  const batch = writeBatch(firestore)
+  batch.set(doc(firestore, 'cases', caseId), customerCase)
+  batch.set(doc(firestore, 'caseEvents', event.id), event)
+  batch.set(doc(firestore, 'caseMessages', message.id), message)
+  await batch.commit()
+  return customerCase
+}
+
+export async function updateCustomerCase(
+  caseId: string,
+  changes: Partial<Omit<CustomerCase, 'id' | 'created_at'>>,
+  userId: string,
+  eventType: CaseEvent['type'],
+  summary: string,
+) {
+  const updatedAt = new Date().toISOString()
+  const event = makeCaseEvent(caseId, eventType, summary, userId, updatedAt)
+  if (!db) {
+    const store = currentDemoStore()
+    const found = store.cases.some((item) => item.id === caseId)
+    if (!found) throw new Error('This case is no longer available.')
+    const cases = store.cases.map((item) => item.id === caseId ? { ...item, ...changes, updated_at: updatedAt, last_activity_at: updatedAt } : item)
+    saveDemoStore({ ...store, cases, caseEvents: [...store.caseEvents, event] })
+    return
+  }
+  const firestore = database()
+  const batch = writeBatch(firestore)
+  batch.update(doc(firestore, 'cases', caseId), { ...changes, updated_at: updatedAt, last_activity_at: updatedAt })
+  batch.set(doc(firestore, 'caseEvents', event.id), event)
+  await batch.commit()
+}
+
+export async function addCaseMessage(caseId: string, body: string, direction: CaseMessage['direction'], channel: string, userId: string) {
+  const createdAt = new Date().toISOString()
+  const message: CaseMessage = {
+    id: `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    case_id: caseId,
+    direction,
+    channel,
+    body: body.trim(),
+    author_user_id: direction === 'Inbound' ? 'customer' : userId,
+    created_at: createdAt,
+    delivery_state: direction === 'Outbound' ? 'Sent' : direction === 'Internal note' ? 'Not sent' : 'Delivered',
+  }
+  const eventType: CaseEvent['type'] = direction === 'Internal note' ? 'Note' : 'Customer notification'
+  const summary = direction === 'Internal note' ? 'Internal note added' : direction === 'Outbound' ? `Customer response recorded via ${channel}` : `Customer follow-up received via ${channel}`
+  const event = makeCaseEvent(caseId, eventType, summary, userId, createdAt)
+  const changes = direction === 'Outbound' ? { first_response_at: createdAt } : {}
+  if (!db) {
+    const store = currentDemoStore()
+    const found = store.cases.some((item) => item.id === caseId)
+    if (!found) throw new Error('This case is no longer available.')
+    const cases = store.cases.map((item) => item.id === caseId ? { ...item, ...changes, updated_at: createdAt, last_activity_at: createdAt } : item)
+    saveDemoStore({ ...store, cases, caseEvents: [...store.caseEvents, event], caseMessages: [...store.caseMessages, message] })
+    return
+  }
+  const firestore = database()
+  const batch = writeBatch(firestore)
+  batch.set(doc(firestore, 'caseMessages', message.id), message)
+  batch.set(doc(firestore, 'caseEvents', event.id), event)
+  batch.update(doc(firestore, 'cases', caseId), { ...changes, updated_at: createdAt, last_activity_at: createdAt })
+  await batch.commit()
+}
+
+function makeCaseEvent(caseId: string, type: CaseEvent['type'], summary: string, userId: string, createdAt = new Date().toISOString(), details?: CaseEvent['details']): CaseEvent {
+  return { id: `EVENT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`, case_id: caseId, type, summary, actor_user_id: userId, created_at: createdAt, details }
 }
 
 export function listenCatalogs(onChange: (catalogData: Record<string, CatalogValue[]>) => void, onError: (error: Error) => void): Unsubscribe {

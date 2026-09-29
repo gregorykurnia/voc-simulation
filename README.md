@@ -17,6 +17,6 @@ npm install
 npm run dev
 ```
 
-Open `/reviews` for the unprocessed inbox and `/processed` for tagged reviews and topic clusters. Processing uses the transparent local rule set (`Rules v1.0`) and saves results to browser storage in demo mode or Firestore when configured. It does not call an AI provider.
+Open `/reviews` for the unprocessed inbox, `/processed` for tagged reviews and topic clusters, and `/cases` for customer-service work. Cases can be created from any review; a rule-based triage view also surfaces likely actionable feedback for an agent to confirm. Case records, events, and messages save to browser storage in demo mode or Firestore when configured. Processing and case triage use transparent local rules (`Rules v1.0`) and do not call an AI provider.
 
 Vercel hosting is configured outside this repository.

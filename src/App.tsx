@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
-import { AlertCircle, CircleHelp, Database, FileText, Inbox, LoaderCircle, RefreshCw, Tags } from 'lucide-react'
+import { AlertCircle, BriefcaseBusiness, CircleHelp, Database, FileText, Inbox, LoaderCircle, RefreshCw, Tags } from 'lucide-react'
 import { auth, disableFirestoreData } from './firebase'
-import { ensureSeedData, listenCatalogs, listenClusters, listenLastRun, listenReviews, processReviews, type ProcessProgress } from './data/firestore'
+import { createCustomerCase, ensureSeedData, listenCases, listenCatalogs, listenClusters, listenLastRun, listenReviews, processReviews, type ProcessProgress } from './data/firestore'
+import { triageReview } from './caseTriage'
+import { CasesPage } from './pages/CasesPage'
 import { ProcessedPage } from './pages/ProcessedPage'
 import { ReviewsPage } from './pages/ReviewsPage'
-import type { AuditEntry, CatalogValue, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
+import type { AuditEntry, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
 import { listenReviewAudit } from './data/firestore'
 import { ReviewDrawer } from './components/ReviewDrawer'
 import { WorkspaceContext, type WorkspaceUser } from './context'
@@ -66,6 +68,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
   const [reviews, setReviews] = useState<ReviewRecord[]>([])
   const [catalogs, setCatalogs] = useState<Record<string, CatalogValue[]>>({})
   const [clusters, setClusters] = useState<TopicClusterSummary[]>([])
+  const [cases, setCases] = useState<CustomerCase[]>([])
   const [lastRun, setLastRun] = useState<ProcessingRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -84,6 +87,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
       unsubscribers.push(listenReviews(setReviews, (err) => setError(err.message)))
       unsubscribers.push(listenCatalogs(setCatalogs, (err) => setError(err.message)))
       unsubscribers.push(listenClusters(setClusters, (err) => setError(err.message)))
+      unsubscribers.push(listenCases(setCases, (err) => setError(err.message)))
       unsubscribers.push(listenLastRun(setLastRun, (err) => setError(err.message)))
       setLoading(false)
     }).catch((err: unknown) => {
@@ -126,11 +130,16 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
   }, [processTargets, reviews])
 
   const processOne = useCallback(async (review: ReviewRecord) => processTargets([review]), [processTargets])
+  const createCaseFromReview = useCallback(async (review: ReviewRecord, triage = triageReview(review)) => {
+    const existing = cases.find((customerCase) => customerCase.review_ids.includes(review.id))
+    if (existing) return existing
+    return createCustomerCase(review, triage, user.uid)
+  }, [cases, user.uid])
   const clearProcessProgress = useCallback(() => setProcessProgress(null), [])
   const value = useMemo(() => ({
-    reviews, catalogs, clusters, lastRun, user, loading, error, processProgress,
-    processAll, processOne, openReview: setSelectedReview, clearProcessProgress,
-  }), [reviews, catalogs, clusters, lastRun, user, loading, error, processProgress, processAll, processOne, clearProcessProgress])
+    reviews, catalogs, clusters, cases, lastRun, user, loading, error, processProgress,
+    processAll, processOne, openReview: setSelectedReview, createCaseFromReview, clearProcessProgress,
+  }), [reviews, catalogs, clusters, cases, lastRun, user, loading, error, processProgress, processAll, processOne, createCaseFromReview, clearProcessProgress])
 
   if (loading && !reviews.length) return <CenteredState icon={<LoaderCircle className="spin" />} title="Preparing the review workbench" note="Connecting catalogs and loading the proxy dataset." />
 
@@ -145,6 +154,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
         <nav className="side-nav" aria-label="Main navigation">
           <NavLink to="/reviews" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Inbox size={17} /><span>Reviews</span><span className="nav-count">{reviews.length || 275}</span></NavLink>
           <NavLink to="/processed" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Tags size={17} /><span>Processed</span></NavLink>
+          <NavLink to="/cases" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><BriefcaseBusiness size={17} /><span>Cases</span>{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length > 0 && <span className="nav-count">{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length}</span>}</NavLink>
         </nav>
         <div className="sidebar-rule" />
         <div className="sidebar-section-label">REFERENCE</div>
@@ -157,7 +167,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
 
       <main className="main-shell">
         <header className="topbar">
-          <div className="breadcrumb"><span>Customer signals</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === '/processed' ? 'Processed' : 'Reviews'}</strong></div>
+          <div className="breadcrumb"><span>Customer signals</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === '/processed' ? 'Processed' : location.pathname === '/cases' ? 'Customer service cases' : 'Reviews'}</strong></div>
           <div className="topbar-actions">
             <div className="data-badge"><span className="tiny-dot" /> Dataset: Synthetic proxy</div>
             <div className="topbar-divider" />
@@ -174,9 +184,10 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
           <Route path="/" element={<Navigate to="/reviews" replace />} />
           <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/processed" element={<ProcessedPage />} />
+          <Route path="/cases" element={<CasesPage />} />
           <Route path="*" element={<Navigate to="/reviews" replace />} />
         </Routes>
-        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} catalogs={catalogs} clusters={clusters} audit={audit} mode={location.pathname === '/processed' ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} />}
+        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} catalogs={catalogs} clusters={clusters} audit={audit} mode={location.pathname === '/processed' ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} existingCase={cases.find((customerCase) => customerCase.review_ids.includes(selectedReview.id))} onCreateCase={(review) => createCaseFromReview(review)} />}
       </main>
     </div>
   </WorkspaceContext.Provider>
