@@ -155,8 +155,7 @@ function CaseRow({ customerCase, onOpen }: { customerCase: CustomerCase; onOpen:
 function Metric({ icon, label, value, detail, tone = '', onClick }: { icon: ReactNode; label: string; value: number; detail: string; tone?: string; onClick: () => void }) {
   return <button className={`metric-item metric-clickable ${tone ? `metric-${tone}` : ''}`} onClick={onClick}>
     <span className="metric-top"><span className="metric-icon">{icon}</span><span className="metric-label">{label}</span></span>
-    <span className="metric-value">{value.toLocaleString()}</span>
-    <span className="metric-detail">{detail}</span>
+    <span className="case-metric-reading"><span className="metric-value">{value.toLocaleString()}</span><span className="metric-detail">{detail}</span></span>
   </button>
 }
 
