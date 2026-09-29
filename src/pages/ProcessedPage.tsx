@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, ChevronRight, FilterX, Layers3, Search, Sparkles } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, ArrowUpDown, ChevronRight, FilterX, Layers3, Search, ShieldCheck, Sparkles } from 'lucide-react'
 import { useWorkspace } from '../context'
 import { Pagination, SourceGlyph } from './ReviewsPage'
 import { ReviewState } from '../components/StatusPill'
@@ -10,7 +10,7 @@ import type { ReviewRecord, Sentiment, TopicClusterSummary } from '../types'
 type ProcessedSortKey = 'statement' | 'source' | 'brand' | 'issue' | 'store' | 'sentiment' | 'cluster' | 'confidence' | 'reviewState'
 
 export function ProcessedPage() {
-  const { reviews, catalogs, clusters, lastRun, processAll, openReview, processProgress } = useWorkspace()
+  const { reviews, catalogs, clusters, cases, lastRun, processAll, openReview, processProgress } = useWorkspace()
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({ source: '', brand: '', product: '', issue: '', store: '', sentiment: '', cluster: '', status: '', workflow: '' })
   const [selectedCluster, setSelectedCluster] = useState('')
@@ -121,7 +121,7 @@ export function ProcessedPage() {
 
       <div className="cluster-section-heading"><div><h2>Topic clusters</h2><span>{clusters.filter((cluster) => cluster.review_count > 0).length} groups formed from customer evidence</span></div>{clusters.filter((cluster) => cluster.review_count > 0).length > 4 && <button className="quiet-action" onClick={() => setAllClusters((value) => !value)}>{allClusters ? 'Show top clusters' : 'View all clusters'} <ArrowRight size={14} /></button>}</div>
       <div className={`cluster-grid ${allClusters ? 'cluster-grid-expanded' : ''}`}>
-        {clusterCards.map((cluster) => <ClusterCard key={cluster.id} cluster={cluster} selected={selectedCluster === cluster.id} reviews={reviews} onSelect={() => { const next = selectedCluster === cluster.id ? '' : cluster.id; setSelectedCluster(next); setFilter('cluster', next); setPage(1) }} onReview={openReview} />)}
+        {clusterCards.map((cluster) => <ClusterCard key={cluster.id} cluster={cluster} selected={selectedCluster === cluster.id} reviews={reviews} validatedLearningCount={cases.filter((item) => item.learning?.topic_cluster_id === cluster.id && item.learning.human_validated).length} onSelect={() => { const next = selectedCluster === cluster.id ? '' : cluster.id; setSelectedCluster(next); setFilter('cluster', next); setPage(1) }} onReview={openReview} />)}
       </div>
       {activeCluster && <div className="cluster-evidence-panel">
           <div className="cluster-evidence-title"><div><span className="evidence-label">CUSTOMER EVIDENCE</span><h3>{activeCluster.title}</h3></div><button aria-label="Clear selected cluster" className="quiet-action" onClick={() => { setSelectedCluster(''); setFilter('cluster', '') }}>Clear selection <span>×</span></button></div>
@@ -131,6 +131,7 @@ export function ProcessedPage() {
           if (!review) return null
           return <button className="evidence-quote" key={id} onClick={() => openReview(review)}><span className="quote-mark">“</span><span className="evidence-quote-text">{review.raw_text}</span><span className="evidence-quote-meta">{review.id} <ChevronRight size={13} /></span></button>
         })}</div>
+        {cases.filter((item) => item.learning?.topic_cluster_id === activeCluster.id && item.learning.human_validated).length > 0 && <div className="cluster-case-learning"><div className="cluster-learning-heading"><ShieldCheck size={14} /><span>VALIDATED CASE LEARNING</span><strong>{cases.filter((item) => item.learning?.topic_cluster_id === activeCluster.id && item.learning.human_validated).length} outcomes</strong></div>{cases.filter((item) => item.learning?.topic_cluster_id === activeCluster.id && item.learning.human_validated).map((item) => <div className="cluster-learning-item" key={item.id}><span className="cluster-learning-case">{item.id}</span><strong>{item.learning!.resolution_type}</strong><span>{item.learning!.root_cause} · {item.learning!.customer_outcome}</span></div>)}</div>}
       </div>}
 
       <div className="section-toolbar processed-table-heading"><div className="section-title-group"><h2>Tagged reviews</h2><span className="result-count">{filtered.length.toLocaleString()} results</span></div><div className="assignment-legend"><span className="legend-assignment"><span /> Rule-assigned</span><span className="legend-assignment human"><span /> Human-reviewed</span></div></div>
@@ -180,7 +181,7 @@ export function ProcessedPage() {
   </section>
 }
 
-function ClusterCard({ cluster, selected, reviews, onSelect, onReview }: { cluster: TopicClusterSummary; selected: boolean; reviews: ReviewRecord[]; onSelect: () => void; onReview: (review: ReviewRecord) => void }) {
+function ClusterCard({ cluster, selected, reviews, validatedLearningCount, onSelect, onReview }: { cluster: TopicClusterSummary; selected: boolean; reviews: ReviewRecord[]; validatedLearningCount: number; onSelect: () => void; onReview: (review: ReviewRecord) => void }) {
   const members = reviews.filter((review) => review.annotation?.cluster_id === cluster.id && !review.annotation.excluded_from_clustering)
   const mix = cluster.sentiment_mix ?? {}
   const total = Object.values(mix).reduce((sum, count) => sum + (count ?? 0), 0) || 1
@@ -192,6 +193,7 @@ function ClusterCard({ cluster, selected, reviews, onSelect, onReview }: { clust
       <span className="cluster-card-title">{cluster.title}</span>
       <span className="cluster-summary">{cluster.summary}</span>
       <span className="cluster-tags"><span className="tag-neutral">{cluster.dominant_issues?.[0] ?? cluster.issue}</span><span className="tag-neutral">{cluster.dominant_products?.[0] ?? cluster.product}</span></span>
+      {validatedLearningCount > 0 && <span className="cluster-learning-count"><ShieldCheck size={11} />{validatedLearningCount} validated case {validatedLearningCount === 1 ? 'outcome' : 'outcomes'}</span>}
       <span className="sentiment-bar sentiment-mix-bar" aria-label={`Sentiment mix: ${segments.map(([label, count]) => `${label} ${Math.round(count / total * 100)}%`).join(', ')}`}>{segments.map(([label, count]) => <span className={`mix-${label.toLowerCase()}`} key={label} style={{ width: `${count / total * 100}%` }} />)}</span>
       <span className="cluster-sentiment-copy"><span>Sentiment mix</span><strong>{segments.map(([label, count]) => `${label[0]} ${Math.round(count / total * 100)}%`).join(' · ')}</strong></span>
     </button>

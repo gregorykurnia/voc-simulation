@@ -13,7 +13,7 @@ type PageView = 'cases' | 'candidates'
 const queueTabs: QueueFilter[] = ['All cases', 'My queue', 'Needs triage', 'In review', 'In progress', 'Pending customer', 'Pending internal / store', 'Needs supervisor review', 'Escalated', 'Resolved', 'Closed', 'Reopened']
 
 export function CasesPage() {
-  const { cases, reviews, user, createCaseFromReview, openReview } = useWorkspace()
+  const { cases, reviews, clusters, user, createCaseFromReview, openReview } = useWorkspace()
   const [view, setView] = useState<PageView>('cases')
   const [queue, setQueue] = useState<QueueFilter>('All cases')
   const [search, setSearch] = useState('')
@@ -124,6 +124,7 @@ export function CasesPage() {
       customerCase={cases.find((item) => item.id === selectedCaseId)!}
       cases={cases}
       reviews={reviews}
+      clusters={clusters}
       userId={user.uid}
       onClose={() => setSelectedCaseId('')}
       onOpenReview={(review) => { setSelectedCaseId(''); openReview(review) }}

@@ -17,6 +17,6 @@ npm install
 npm run dev
 ```
 
-Open `/reviews` for the unprocessed inbox, `/processed` for tagged reviews and topic clusters, and `/cases` for customer-service work. Cases can be created from any review; a rule-based triage view also surfaces likely actionable feedback for an agent to confirm. Case records, events, and messages save to browser storage in demo mode or Firestore when configured. Processing and case triage use transparent local rules (`Rules v1.0`) and do not call an AI provider.
+Open `/reviews` for the unprocessed inbox, `/processed` for tagged reviews and topic clusters, and `/cases` for customer-service work. Cases can be created from any review; a rule-based triage view also surfaces likely actionable feedback for an agent to confirm. The case workflow records ownership, SLA and supervisor decisions, escalation, response history, resolution, QA, reopening, and validated learning linked to topic clusters. Case records, events, and messages save to browser storage in demo mode or Firestore when configured. Processing and case triage use transparent local rules (`Rules v1.0`) and do not call an AI provider. Customer messages are recorded after agents send them through the channel; this prototype does not send messages externally.
 
 Vercel hosting is configured outside this repository.

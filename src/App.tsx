@@ -154,7 +154,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
         <nav className="side-nav" aria-label="Main navigation">
           <NavLink to="/reviews" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Inbox size={17} /><span>Reviews</span><span className="nav-count">{reviews.length || 275}</span></NavLink>
           <NavLink to="/processed" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Tags size={17} /><span>Processed</span></NavLink>
-          <NavLink to="/cases" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><BriefcaseBusiness size={17} /><span>Cases</span>{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length > 0 && <span className="nav-count">{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length}</span>}</NavLink>
+          <NavLink to="/cases" className={({ isActive }) => `nav-link nav-link-cases ${isActive ? 'active' : ''}`}><BriefcaseBusiness size={17} /><span className="nav-label-long">Customer service cases</span><span className="nav-label-short">Cases</span>{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length > 0 && <span className="nav-count">{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length}</span>}</NavLink>
         </nav>
         <div className="sidebar-rule" />
         <div className="sidebar-section-label">REFERENCE</div>
