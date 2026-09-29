@@ -177,7 +177,7 @@ export interface CustomerCase {
 export interface CaseEvent {
   id: string
   case_id: string
-  type: 'Status change' | 'Assignment' | 'Note' | 'Escalation' | 'Supervisor decision' | 'QA decision' | 'Customer notification' | 'Resolution' | 'Reopened' | 'Created'
+  type: 'Status change' | 'Assignment' | 'Evidence linked' | 'Note' | 'Escalation' | 'Supervisor decision' | 'QA decision' | 'Customer notification' | 'Resolution' | 'Reopened' | 'Created'
   summary: string
   actor_user_id: string
   created_at: string

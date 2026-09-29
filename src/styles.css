@@ -183,6 +183,67 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .case-create-button svg { flex: 0 0 auto; }
 .drawer-section .case-create-button { margin-top: 1px; }
 .drawer-section .drawer-error { margin-top: 8px; }
+.case-table-row { cursor: pointer; }
+.case-drawer-scrim { z-index: 31; }
+.case-drawer { width: min(700px, 100vw); }
+.case-drawer-header { gap: 14px; }
+.case-header-actions { display: flex; align-items: center; gap: 8px; }
+.case-header-actions .case-status { white-space: nowrap; }
+.case-detail-overview > h3 { margin: 0 0 10px; color: #293b55; font-size: 16px; font-weight: 700; line-height: 1.4; }
+.case-detail-meta { display: flex; flex-wrap: wrap; gap: 7px 13px; margin-bottom: 15px; color: #7b899c; font-size: 10px; }
+.case-detail-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.case-detail-meta svg { color: #8391a4; }
+.case-assignment-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.case-assignment-controls label, .case-transition-row label { min-width: 0; display: grid; gap: 5px; color: #738198; font-size: 10px; font-weight: 600; }
+.case-assignment-controls select, .case-transition-row select, .link-evidence-control select { width: 100%; min-width: 0; height: 34px; padding: 0 9px; border: 1px solid #dfe5ed; border-radius: 4px; background: #fff; color: #44546b; font-size: 11px; }
+.case-transition-row { display: flex; align-items: end; gap: 12px; margin-top: 11px; }
+.case-transition-row label { width: min(100%, 260px); }
+.case-transition-row > span { padding-bottom: 9px; color: #98a3b1; font-size: 9px; }
+.case-evidence-card { margin-bottom: 9px; padding: 11px; border: 1px solid #e5eaf0; border-radius: 5px; background: #fbfcfe; }
+.case-evidence-card:last-of-type { margin-bottom: 0; }
+.case-evidence-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.case-evidence-top > span { color: #8a96a7; font-size: 9px; text-align: right; }
+.evidence-link { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: #315ba6; font-size: 10px; font-weight: 700; cursor: pointer; }
+.evidence-link:hover { color: #1749aa; }
+.case-evidence-card blockquote { margin: 0; color: #34445b; font-size: 12px; line-height: 1.55; }
+.case-no-evidence { margin: 0; color: #8794a6; font-size: 11px; line-height: 1.5; }
+.link-evidence-control { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.link-evidence-control select { flex: 1; }
+.case-ai-section { background: #fbfcfe; }
+.case-ai-section .drawer-section-title h3, .case-response-section .drawer-section-title h3 { display: inline-flex; align-items: center; gap: 6px; }
+.case-ai-section .drawer-section-title h3 svg { color: #607fb8; }
+.case-ai-explanation { margin: 0 0 11px; color: #6f7f95; font-size: 11px; line-height: 1.5; }
+.case-ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.case-ai-datum { min-width: 0; display: grid; gap: 4px; padding: 8px; border: 1px solid #e8edf3; border-radius: 4px; background: #fff; }
+.case-ai-datum > span { color: #929eae; font-size: 9px; }
+.case-ai-datum > strong { overflow-wrap: anywhere; color: #50617a; font-size: 10px; font-weight: 650; }
+.case-rule-version { margin-top: 9px; color: #9aa5b2; font-size: 9px; }
+.case-timeline { display: grid; gap: 0; margin: 0 0 16px; }
+.case-timeline-item { position: relative; display: flex; gap: 10px; padding: 0 0 14px; }
+.case-timeline-item:not(:last-child)::before { content: ""; position: absolute; top: 23px; bottom: 0; left: 9px; border-left: 1px solid #e1e7ef; }
+.timeline-marker { width: 20px; height: 20px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #dce5f1; border-radius: 50%; background: #f4f7fc; color: #6880a4; }
+.timeline-note .timeline-marker { border-color: #efdfbd; background: #fff9eb; color: #a06d1e; }
+.timeline-copy { min-width: 0; flex: 1; padding-top: 1px; }
+.timeline-title-row { display: flex; justify-content: space-between; gap: 10px; }
+.timeline-title-row strong { color: #4a5a71; font-size: 10px; font-weight: 650; }
+.timeline-title-row > span { color: #9aa5b3; font-size: 9px; white-space: nowrap; }
+.timeline-copy p { margin: 5px 0 0; color: #64748a; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.timeline-copy small { display: block; margin-top: 4px; color: #9aa5b3; font-size: 9px; }
+.case-compose-label { display: grid; gap: 6px; color: #78869a; font-size: 10px; font-weight: 600; }
+.case-compose-label > span { display: inline-flex; align-items: center; gap: 5px; }
+.case-compose-label textarea { width: 100%; resize: vertical; padding: 9px; border: 1px solid #dfe5ed; border-radius: 4px; background: white; color: #3f5069; font-size: 11px; line-height: 1.5; }
+.case-compose-label textarea::placeholder { color: #a2adba; }
+.case-submit-button { min-height: 32px; margin-top: 8px; font-size: 10px; }
+.case-prototype-note { margin: 7px 0 0; color: #929eae; font-size: 9px; line-height: 1.45; }
+.related-case-list { display: grid; }
+.related-case-list button { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border: 0; border-top: 1px solid #edf0f4; background: transparent; text-align: left; cursor: pointer; }
+.related-case-list button:first-child { border-top: 0; }
+.related-case-list button > span:first-child { min-width: 0; display: grid; gap: 3px; }
+.related-case-list strong { color: #496188; font-size: 10px; }
+.related-case-list small { overflow: hidden; color: #7a8798; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.related-case-list button:hover strong { color: var(--blue); }
+.case-drawer-error { min-height: 34px; display: flex; align-items: center; gap: 7px; margin: 0 18px 8px; padding: 7px 9px; border: 1px solid #efc9c9; border-radius: 4px; background: #fff7f7; color: #933c3f; font-size: 10px; }
+.case-drawer-error svg { flex: 0 0 auto; }
 .section-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
 .section-title-group { display: flex; align-items: baseline; gap: 9px; }
 .section-title-group h2, .cluster-section-heading h2 { margin: 0; color: #24334b; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }

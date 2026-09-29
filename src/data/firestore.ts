@@ -288,7 +288,7 @@ export async function updateCustomerCase(
   await batch.commit()
 }
 
-export async function addCaseMessage(caseId: string, body: string, direction: CaseMessage['direction'], channel: string, userId: string) {
+export async function addCaseMessage(caseId: string, body: string, direction: CaseMessage['direction'], channel: string, userId: string, markFirstResponse = false) {
   const createdAt = new Date().toISOString()
   const message: CaseMessage = {
     id: `MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
@@ -303,7 +303,7 @@ export async function addCaseMessage(caseId: string, body: string, direction: Ca
   const eventType: CaseEvent['type'] = direction === 'Internal note' ? 'Note' : 'Customer notification'
   const summary = direction === 'Internal note' ? 'Internal note added' : direction === 'Outbound' ? `Customer response recorded via ${channel}` : `Customer follow-up received via ${channel}`
   const event = makeCaseEvent(caseId, eventType, summary, userId, createdAt)
-  const changes = direction === 'Outbound' ? { first_response_at: createdAt } : {}
+  const changes = direction === 'Outbound' && markFirstResponse ? { first_response_at: createdAt } : {}
   if (!db) {
     const store = currentDemoStore()
     const found = store.cases.some((item) => item.id === caseId)

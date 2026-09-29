@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { AlertTriangle, BriefcaseBusiness, CheckCircle2, Clock3, Search, ShieldCheck, Siren, Sparkles } from 'lucide-react'
 import { triageReview } from '../caseTriage'
+import { CaseDrawer } from '../components/CaseDrawer'
 import { slaPolicies } from '../data/firestore'
 import { useWorkspace } from '../context'
 import type { CaseStatus, CustomerCase, ReviewRecord } from '../types'
@@ -12,7 +13,7 @@ type PageView = 'cases' | 'candidates'
 const queueTabs: QueueFilter[] = ['All cases', 'My queue', 'Needs triage', 'In review', 'In progress', 'Pending customer', 'Pending internal / store', 'Needs supervisor review', 'Escalated', 'Resolved', 'Closed', 'Reopened']
 
 export function CasesPage() {
-  const { cases, reviews, user, createCaseFromReview } = useWorkspace()
+  const { cases, reviews, user, createCaseFromReview, openReview } = useWorkspace()
   const [view, setView] = useState<PageView>('cases')
   const [queue, setQueue] = useState<QueueFilter>('All cases')
   const [search, setSearch] = useState('')
@@ -21,6 +22,7 @@ export function CasesPage() {
   const [source, setSource] = useState('')
   const [creatingId, setCreatingId] = useState('')
   const [createdIds, setCreatedIds] = useState<string[]>([])
+  const [selectedCaseId, setSelectedCaseId] = useState('')
   const [actionError, setActionError] = useState('')
   const now = Date.now()
   const activeCases = cases.filter((item) => !['Resolved', 'Closed'].includes(item.status))
@@ -103,7 +105,7 @@ export function CasesPage() {
     {actionError && <div className="case-action-error" role="alert">{actionError}</div>}
     <div className="table-frame case-table-frame"><div className="table-scroll">
       {view === 'cases' ? <table className="data-table case-table"><thead><tr><th>CASE ID</th><th>PRIORITY · SLA</th><th>CUSTOMER ISSUE</th><th>CHANNEL</th><th>BRAND · PRODUCT</th><th>ISSUE TYPE</th><th>OWNER · TEAM</th><th>STATUS</th><th>LAST ACTIVITY</th></tr></thead><tbody>
-        {matchingCases.map((item) => <CaseRow key={item.id} customerCase={item} />)}
+        {matchingCases.map((item) => <CaseRow key={item.id} customerCase={item} onOpen={() => setSelectedCaseId(item.id)} />)}
       </tbody></table> : <table className="data-table candidate-table"><thead><tr><th>REVIEW</th><th>TRIAGE</th><th>ISSUE TYPE · TEAM</th><th>CHANNEL</th><th>RECEIVED</th><th>ACTION</th></tr></thead><tbody>
         {matchingCandidates.map(({ review, triage }) => <tr key={review.id}>
           <td className="candidate-statement"><p>“{review.raw_text}”</p><span>{review.id} · {review.processing_status}</span></td>
@@ -115,16 +117,25 @@ export function CasesPage() {
       </tbody></table>}
       {((view === 'cases' && !matchingCases.length) || (view === 'candidates' && !matchingCandidates.length)) && <div className="empty-table case-empty"><div className="empty-icon"><BriefcaseBusiness size={17} /></div><h3>{view === 'cases' ? 'No cases in this queue yet' : 'No actionable candidates found'}</h3><p>{view === 'cases' ? 'Create a case from any review, or switch to actionable candidates to triage likely customer follow-up.' : 'Candidate triage excludes insight-only feedback. Clear filters or review a statement directly to create a case.'}</p></div>}
     </div><div className="table-footer"><span>Showing <strong>{view === 'candidates' ? matchingCandidates.length : matchingCases.length}</strong> of <strong>{view === 'candidates' ? candidates.length : cases.length}</strong> {view === 'candidates' ? 'candidates' : 'cases'}</span><span>{slaPolicies.length} demo SLA policies · Rules v1.0 triage</span></div></div>
+    {cases.find((item) => item.id === selectedCaseId) && <CaseDrawer
+      customerCase={cases.find((item) => item.id === selectedCaseId)!}
+      cases={cases}
+      reviews={reviews}
+      userId={user.uid}
+      onClose={() => setSelectedCaseId('')}
+      onOpenReview={(review) => { setSelectedCaseId(''); openReview(review) }}
+      onSelectCase={setSelectedCaseId}
+    />}
   </section>
 }
 
-function CaseRow({ customerCase }: { customerCase: CustomerCase }) {
+function CaseRow({ customerCase, onOpen }: { customerCase: CustomerCase; onOpen: () => void }) {
   const dueAt = new Date(customerCase.first_response_at ? customerCase.resolution_due_at : customerCase.first_response_due_at).getTime()
   const remaining = dueAt - Date.now()
   const paused = slaPolicies.find((item) => item.id === customerCase.sla_policy_id)?.pause_statuses.includes(customerCase.status) ?? false
   const slaText = paused ? 'Paused' : remaining <= 0 ? 'Breached' : formatRemaining(remaining)
   const priorityClass = customerCase.priority.toLowerCase()
-  return <tr>
+  return <tr className="case-table-row" tabIndex={0} onClick={onOpen} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }} aria-label={`Open case ${customerCase.id}`}>
     <td className="case-id-cell"><strong>{customerCase.id}</strong><small>{formatDate(customerCase.created_at)}</small></td>
     <td><span className={`case-priority priority-${priorityClass}`}>{customerCase.priority}</span><small className={`case-sla ${remaining <= 0 && !paused ? 'breached' : isSlaAtRisk(customerCase, Date.now()) ? 'at-risk' : ''}`}><Clock3 size={11} />{slaText}</small></td>
     <td className="case-subject-cell"><strong>{customerCase.subject}</strong><small>{customerCase.review_ids.length} linked review{customerCase.review_ids.length === 1 ? '' : 's'}</small></td>
