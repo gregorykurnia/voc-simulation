@@ -12,9 +12,10 @@ export function InsightsPage() {
   const latest = reviews.map(r => r.feedback_at.slice(0, 10)).sort().at(-1) ?? new Date().toISOString().slice(0, 10)
   const [scope, setScope] = useState<InsightScope>({ ...emptyScope, start: new Date(Date.parse(latest) - 29 * 86400000).toISOString().slice(0, 10), end: latest })
   const [selected, setSelected] = useState('')
+  const [preset,setPreset] = useState('30')
   const current = scopedReviews(reviews, scope), previous = scopedReviews(reviews, previousScope(scope))
   const candidates = clusters.map(cluster => ({ ...cluster, members: current.filter(r => !r.annotation!.excluded_from_clustering && r.annotation!.cluster_id === cluster.id) })).filter(c => c.members.length).sort((a,b) => b.members.length-a.members.length)
-  const update = (key: keyof InsightScope, value: string) => { setScope(s => ({ ...s, [key]: value })); setSelected('') }
+  const update = (key: keyof InsightScope, value: string) => { setScope(s => ({ ...s, [key]: value })); if(key==='start'||key==='end') setPreset(''); setSelected('') }
   const dimensions: [keyof InsightScope, string, (r: typeof reviews[number]) => string | null | undefined][] = [
     ['brand','Brand',r=>r.annotation?.brand], ['product','Product category',r=>r.annotation?.product_category], ['issue','Issue type',r=>r.annotation?.issue_type], ['store','Store / location',r=>r.annotation?.store_id], ['source','Voice source',r=>r.voice_source], ['sentiment','Sentiment',r=>r.annotation?.sentiment],
   ]
@@ -22,11 +23,11 @@ export function InsightsPage() {
     <div className="page-heading-row"><div><h1>Service Insights Recap</h1><p className="page-subtitle">{scope.start} – {scope.end} · Systemic improvement signals from synthetic proxy feedback.</p></div></div>
     <div className="insights-tabs">{['Recap','Improvement actions'].map(v=><button key={v} className="button-secondary" aria-pressed={view===v} onClick={()=>setView(v)}>{v}</button>)}</div>
     <div className="insights-filters">
-      <label>Period<select aria-label="Period preset" defaultValue="30" onChange={e=>{ if(e.target.value) setScope(s=>({...s,start:new Date(Date.parse(latest)-(Number(e.target.value)-1)*86400000).toISOString().slice(0,10),end:latest})) }}><option value="30">Latest 30 dataset days</option><option value="60">Latest 60 dataset days</option><option value="120">Latest 120 dataset days</option><option value="">Custom range</option></select></label>
+      <label>Period<select aria-label="Period preset" value={preset} onChange={e=>{ setPreset(e.target.value); if(e.target.value) setScope(s=>({...s,start:new Date(Date.parse(latest)-(Number(e.target.value)-1)*86400000).toISOString().slice(0,10),end:latest})) }}><option value="30">Latest 30 dataset days</option><option value="60">Latest 60 dataset days</option><option value="120">Latest 120 dataset days</option><option value="">Custom range</option></select></label>
       <label>From<input type="date" value={scope.start} onChange={e=>update('start',e.target.value)} /></label><label>Through<input type="date" value={scope.end} onChange={e=>update('end',e.target.value)} /></label>
       {dimensions.map(([key,label,get])=><label key={key}>{label}<select value={scope[key]} onChange={e=>update(key,e.target.value)}><option value="">All</option>{[...new Set(reviews.map(get).filter((v):v is string=>Boolean(v)))].sort().map(v=><option key={v}>{v}</option>)}</select></label>)}
       <label>Topic<select value={scope.topic} onChange={e=>update('topic',e.target.value)}><option value="">All topics</option>{clusters.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
-      <button className="button-secondary" onClick={()=>{setScope({...emptyScope,start:new Date(Date.parse(latest)-29*86400000).toISOString().slice(0,10),end:latest});setSelected('')}}>Clear filters</button>
+      <button className="button-secondary" onClick={()=>{setScope({...emptyScope,start:new Date(Date.parse(latest)-29*86400000).toISOString().slice(0,10),end:latest});setSelected('');setPreset('30')}}>Clear filters</button>
     </div>
     <p role="status">{current.length} eligible tagged statements · {Object.entries(scope).filter(([k,v])=>v && !['start','end'].includes(k)).map(([k,v])=>`${k}: ${v}`).join(' · ') || 'All dimensions'}</p>
     {!validWindow(scope) && <p role="alert">Select a valid start and end date.</p>}
@@ -49,7 +50,7 @@ export function InsightsPage() {
       <button className="button-primary" onClick={()=>setEditing(newAction(c.id,c.title,scope,c.members.map(r=>r.id),user.uid))}>Create improvement action</button>
       <button className="button-secondary" onClick={()=>setSelected(selected===c.id?'':c.id)} aria-expanded={selected===c.id}>Review evidence ({c.members.length})</button>
       {(selected===c.id?c.members:c.members.slice(0,2)).map(r=><button className="insight-evidence" key={r.id} onClick={()=>openReview(r)}><span>“{r.raw_text}”</span><small>{r.id} · {r.annotation!.brand ?? 'Unknown brand'} · {r.annotation!.product_category ?? 'Unknown product'} · {r.annotation!.store_id ?? 'Unknown store'} · {r.voice_source} · {r.feedback_at.slice(0,10)} · {r.annotation!.review_state} · {Math.round(r.annotation!.confidence*100)}% confidence</small></button>)}
-      {selected===c.id && <><p><strong>Possible driver:</strong> No analyst hypothesis entered. Tags alone do not establish a root cause.</p><p><strong>Recommendation:</strong> Review the evidence with the relevant function before planning a response.</p><h3>Validated case learning</h3>{cases.filter(k=>k.learning?.human_validated && k.review_ids.some(id=>c.members.some(r=>r.id===id))).map(k=><p key={k.id}><a href={`/cases?case=${k.id}`}>{k.id}</a> · {k.learning!.root_cause} · {k.learning!.product_or_store_signal}</p>)}<p>Learning is limited to validated cases linked to these exact statements.</p></>}
+      {selected===c.id && <><h3>Evidence breakdown</h3>{dimensions.filter(([key])=>['brand','product','store','source'].includes(key)).map(([key,label,get])=><p key={key}><strong>{label}:</strong> {[...new Set(c.members.map(r=>get(r)||'Unknown'))].map(v=>`${v}: ${c.members.filter(r=>(get(r)||'Unknown')===v).length}`).join(' · ')}</p>)}<p><strong>Possible driver:</strong> No analyst hypothesis entered. Tags alone do not establish a root cause.</p><p><strong>Recommendation:</strong> Review the evidence with the relevant function before planning a response.</p><h3>Validated case learning</h3>{cases.filter(k=>k.learning?.human_validated && k.review_ids.some(id=>c.members.some(r=>r.id===id))).map(k=><p key={k.id}><a href={`/cases?case=${k.id}`}>{k.id}</a> · {k.learning!.root_cause} · {k.learning!.product_or_store_signal}</p>)}<p>Learning is limited to validated cases linked to these exact statements.</p></>}
     </section>})}
     </>}
   </div>

@@ -22,7 +22,7 @@ export function CasesPage() {
   const [source, setSource] = useState('')
   const [creatingId, setCreatingId] = useState('')
   const [createdIds, setCreatedIds] = useState<string[]>([])
-  const [selectedCaseId, setSelectedCaseId] = useState('')
+  const [selectedCaseId, setSelectedCaseId] = useState(() => new URLSearchParams(window.location.search).get('case') ?? '')
   const [actionError, setActionError] = useState('')
   const now = Date.now()
   const activeCases = cases.filter((item) => !['Resolved', 'Closed'].includes(item.status))

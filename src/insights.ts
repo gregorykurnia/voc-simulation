@@ -28,3 +28,13 @@ export function negativeCount(reviews: ReviewRecord[]) { return reviews.filter(r
 export function sentimentCounts(reviews: ReviewRecord[]) {
   return ['Positive', 'Neutral', 'Mixed', 'Negative'].map(label => ({ label, count: reviews.filter(r => r.annotation?.sentiment === label).length }))
 }
+
+export function measureSignal(reviews: ReviewRecord[], scope: InsightScope, metric: string) {
+  const members = scopedReviews(reviews, scope)
+  return { start: scope.start, end: scope.end, value: metric === 'Manual measure' || !members.length ? null : metric === 'Issue count' ? members.length : negativeCount(members) / members.length * 100, denominator: members.length, evidence_ids: members.map(r => r.id) }
+}
+export function compareSignal(baseline: { value: number | null; denominator: number }, followup: { value: number | null; denominator: number }) {
+  if (baseline.value === null || followup.value === null || baseline.denominator < MIN_EVIDENCE || followup.denominator < MIN_EVIDENCE) return { label: 'Insufficient evidence', absolute: null, relative: null }
+  const absolute = followup.value - baseline.value
+  return { label: Math.abs(absolute) < 0.000001 ? 'Unchanged' : absolute < 0 ? 'Improved' : 'Worsened', absolute, relative: baseline.value ? absolute / baseline.value * 100 : null }
+}
