@@ -7,6 +7,7 @@ import { createCustomerCase, ensureSeedData, listenCases, listenCatalogs, listen
 import { rulesCaseTriageProvider } from './caseTriage'
 import { CasesPage } from './pages/CasesPage'
 import { ProcessedPage } from './pages/ProcessedPage'
+import { InsightsPage } from './pages/InsightsPage'
 import { ReviewsPage } from './pages/ReviewsPage'
 import type { AuditEntry, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, TopicClusterSummary } from './types'
 import { listenReviewAudit } from './data/firestore'
@@ -154,6 +155,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
         <nav className="side-nav" aria-label="Main navigation">
           <NavLink to="/reviews" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Inbox size={17} /><span>Reviews</span><span className="nav-count">{reviews.length || 275}</span></NavLink>
           <NavLink to="/processed" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Tags size={17} /><span>Processed</span></NavLink>
+          <NavLink to="/insights" className={({ isActive }) => `nav-link nav-link-insights ${isActive ? 'active' : ''}`}><Tags size={17} /><span className="nav-label-long">Service Insights Recap</span><span className="nav-label-short">Insights</span></NavLink>
           <NavLink to="/cases" className={({ isActive }) => `nav-link nav-link-cases ${isActive ? 'active' : ''}`}><BriefcaseBusiness size={17} /><span className="nav-label-long">Customer service cases</span><span className="nav-label-short">Cases</span>{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length > 0 && <span className="nav-count">{cases.filter((customerCase) => !['Resolved', 'Closed'].includes(customerCase.status)).length}</span>}</NavLink>
         </nav>
         <div className="sidebar-rule" />
@@ -167,7 +169,7 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
 
       <main className="main-shell">
         <header className="topbar">
-          <div className="breadcrumb"><span>Customer signals</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === '/processed' ? 'Processed' : location.pathname === '/cases' ? 'Customer service cases' : 'Reviews'}</strong></div>
+          <div className="breadcrumb"><span>Customer signals</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === '/processed' ? 'Processed' : location.pathname === '/insights' ? 'Service Insights Recap' : location.pathname === '/cases' ? 'Customer service cases' : 'Reviews'}</strong></div>
           <div className="topbar-actions">
             <div className="data-badge"><span className="tiny-dot" /> Dataset: Synthetic proxy</div>
             <div className="topbar-divider" />
@@ -184,10 +186,11 @@ function Workspace({ user, demoMode = false }: { user: WorkspaceUser; demoMode?:
           <Route path="/" element={<Navigate to="/reviews" replace />} />
           <Route path="/reviews" element={<ReviewsPage />} />
           <Route path="/processed" element={<ProcessedPage />} />
+          <Route path="/insights" element={<InsightsPage />} />
           <Route path="/cases" element={<CasesPage />} />
           <Route path="*" element={<Navigate to="/reviews" replace />} />
         </Routes>
-        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} cases={cases} catalogs={catalogs} clusters={clusters} audit={audit} mode={location.pathname === '/processed' ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} existingCase={cases.find((customerCase) => customerCase.review_ids.includes(selectedReview.id))} onCreateCase={(review) => createCaseFromReview(review)} />}
+        {selectedReview && <ReviewDrawer review={reviews.find((review) => review.id === selectedReview.id) ?? selectedReview} allReviews={reviews} cases={cases} catalogs={catalogs} clusters={clusters} audit={audit} mode={['/processed', '/insights'].includes(location.pathname) ? 'processed' : 'raw'} userId={user.uid} onClose={() => setSelectedReview(null)} onProcess={() => void processOne(selectedReview)} existingCase={cases.find((customerCase) => customerCase.review_ids.includes(selectedReview.id))} onCreateCase={(review) => createCaseFromReview(review)} />}
       </main>
     </div>
   </WorkspaceContext.Provider>

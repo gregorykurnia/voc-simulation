@@ -733,3 +733,19 @@ h1, h2, h3, h4, p { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.insights-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.insights-filters { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; background: white; border: 1px solid var(--line); border-radius: 6px; }
+.insights-filters label, .insight-form label { display: grid; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+.insights-filters input, .insights-filters select, .insight-form input, .insight-form select, .insight-form textarea { min-height: 36px; max-width: 240px; padding: 7px; border: 1px solid var(--line); border-radius: 4px; background: white; color: var(--ink); }
+.insight-panel { padding: 20px; margin: 16px 0; border: 1px solid var(--line); border-radius: 6px; background: white; font-size: 13px; line-height: 1.6; }
+.insight-panel h2 { font-size: 18px; margin: 0 0 12px; }
+.insight-evidence { width: 100%; display: grid; gap: 8px; text-align: left; padding: 12px; margin-top: 10px; background: var(--canvas); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); cursor: pointer; }
+.insight-evidence small { color: var(--ink-muted); }
+.nav-link-insights { font-size: 11px; }
+.nav-link-insights .nav-label-short { display: none; }
+.insights-page .metric-item { gap: 8px; }
+.insights-page .metric-item small { color: var(--ink-muted); }
+.insight-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.insight-form input, .insight-form select, .insight-form textarea { width: 100%; max-width: none; }
+@media(max-width:680px) { .nav-link-insights .nav-label-long { display:none; } .nav-link-insights .nav-label-short { display:inline; } .insight-form { grid-template-columns:1fr; } .insights-filters label { width:calc(50% - 6px); } .insights-filters select, .insights-filters input { width:100%; min-width:0; } }
