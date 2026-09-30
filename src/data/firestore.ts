@@ -9,6 +9,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  setDoc,
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore'
@@ -16,9 +17,10 @@ import { db } from '../firebase'
 import { catalogs, topicClusters } from './taxonomy'
 import { seedByChannel, seedStatementCount } from './seedStatements'
 import { annotateReview } from '../processor'
-import type { Annotation, AuditEntry, CaseEvent, CaseMessage, CaseTriage, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, SLAPolicy, TopicClusterSummary } from '../types'
+import type { ImprovementAction, Annotation, AuditEntry, CaseEvent, CaseMessage, CaseTriage, CatalogValue, CustomerCase, ProcessingRun, ReviewRecord, SLAPolicy, TopicClusterSummary } from '../types'
 
 interface DemoStore {
+  improvementActions: ImprovementAction[]
   reviews: ReviewRecord[]
   catalogs: Record<string, CatalogValue[]>
   clusters: TopicClusterSummary[]
@@ -45,6 +47,7 @@ function readDemoStore(): DemoStore | null {
     const value = JSON.parse(raw) as Partial<DemoStore>
     if (!Array.isArray(value.reviews) || !value.catalogs || !Array.isArray(value.clusters)) return null
     return {
+      improvementActions: value.improvementActions ?? [],
       reviews: value.reviews,
       catalogs: value.catalogs,
       clusters: value.clusters,
@@ -85,6 +88,7 @@ function createDemoStore(): DemoStore {
     }
   }))
   return {
+    improvementActions: [],
     reviews,
     catalogs: Object.fromEntries(Object.entries(catalogs).map(([key, values]) => [key, values.map((value) => ({ ...value }))])),
     clusters: topicClusters.map((cluster) => ({ ...cluster, review_count: 0, sentiment_mix: {}, representative_review_ids: [] })),
@@ -647,4 +651,21 @@ function addClusterSummaryUpdates(batch: ReturnType<typeof writeBatch>, reviews:
       updated_at: new Date().toISOString(),
     })
   }
+}
+
+export function listenImprovementActions(onChange: (actions: ImprovementAction[]) => void, onError: (error: Error) => void): Unsubscribe {
+  if (!db) return listenToDemo(() => onChange([...currentDemoStore().improvementActions].sort((a,b) => b.updated_at.localeCompare(a.updated_at))))
+  return onSnapshot(collection(database(), 'improvementActions'), snapshot => onChange(snapshot.docs.map(item => ({ ...item.data(), id: item.id } as ImprovementAction)).sort((a,b) => b.updated_at.localeCompare(a.updated_at))), onError)
+}
+
+export async function saveImprovementAction(action: ImprovementAction) {
+  if (!db) {
+    const store = currentDemoStore()
+    const next = { ...store, improvementActions: [action, ...store.improvementActions.filter(a => a.id !== action.id)] }
+    // Action saves must report storage failures so a refresh cannot silently lose work.
+    window.localStorage.setItem(demoStorageKey, JSON.stringify(next))
+    saveDemoStore(next)
+    return
+  }
+  await setDoc(doc(database(), 'improvementActions', action.id), action)
 }

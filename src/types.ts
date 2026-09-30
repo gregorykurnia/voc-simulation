@@ -212,3 +212,31 @@ export interface SLAPolicy {
   pause_statuses: CaseStatus[]
   escalation_minutes_before_due: number
 }
+
+export interface ImprovementAction {
+  id: string
+  title: string
+  intended_change: string
+  topic_id: string
+  scope: import('./insights').InsightScope
+  evidence_ids: string[]
+  owner_function: string
+  owner_name: string
+  contributors: string
+  status: 'Proposed' | 'Planned' | 'In progress' | 'Monitoring impact' | 'Completed' | 'Closed'
+  due_date: string
+  next_review_date: string
+  notes: string
+  hypothesis: string
+  metric: 'Issue count' | 'Negative / mixed share' | 'Manual measure'
+  target: string
+  baseline: { start: string; end: string; value: number | null; denominator: number; evidence_ids: string[] } | null
+  followup_start: string
+  followup_end: string
+  outcome_note: string
+  created_at: string
+  created_by: string
+  updated_at: string
+  updated_by: string
+  updates: { at: string; by: string; status: string; notes: string }[]
+}
